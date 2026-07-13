@@ -88,6 +88,11 @@ button { font-family: inherit; color: var(--ink); }
 
 /* context menu */
 .menu { position:absolute; right:8px; top:52px; z-index:30; background:rgba(255,255,255,0.92); backdrop-filter:blur(12px); border:1px solid rgba(59,54,81,0.1); border-radius:12px; box-shadow:0 8px 24px rgba(59,54,81,0.18); overflow:hidden; min-width:180px; animation: poet-fade 0.14s ease-out; }
+/* full-screen catcher behind an open menu: blocks click-through to the layout below */
+.menu-shield { position:fixed; inset:0; z-index:29; background:transparent; }
+/* lift the row that owns the open menu above sibling rows and the tray */
+.row.menu-open { z-index:45; }
+.row.menu-open:active { transform:none; }
 .menu button { display:block; width:100%; text-align:left; border:none; background:transparent; cursor:pointer; font-size:13px; font-weight:500; padding:11px 16px; color:var(--ink); }
 .menu button:active { background: var(--accent-faint); }
 .menu .menu-form { display:flex; gap:6px; padding:8px 10px; }
@@ -148,6 +153,15 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .tray-play { border:none; cursor:pointer; width:48px; height:48px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px var(--accent-shadow); }
 .tray-play:active { transform: scale(0.9); }
 
+/* queue drawer */
+@keyframes queue-up { from { transform:translate(-50%,100%); } to { transform:translate(-50%,0); } }
+.queue-shield { position:fixed; inset:0; z-index:64; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); }
+.queue-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; max-height:72vh; z-index:65;
+  background:#ffffff; border-radius:22px 22px 0 0; box-shadow:0 -8px 32px rgba(59,54,81,0.25);
+  padding:18px 16px calc(14px + env(safe-area-inset-bottom)) 16px; display:flex; flex-direction:column; animation: queue-up 0.22s ease-out; }
+.queue-list { overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+.queue-num { width:26px; text-align:center; font-size:12px; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums; flex-shrink:0; }
+
 /* modal + toast */
 #modal-root .modal-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; padding:24px; }
 .modal { background:#ffffff; border-radius:18px; padding:20px; width:100%; max-width:400px; box-shadow:0 16px 48px rgba(59,54,81,0.3); animation:poet-fade 0.15s ease-out; }
@@ -201,6 +215,7 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
     </div>
   </div>
 
+  <div id="queue-root"></div>
   <div id="modal-root"></div>
   <div id="toast"></div>
 </div>
@@ -212,6 +227,18 @@ var ICON_PLAY_SM = '<svg width="14" height="16" viewBox="0 0 22 26" style="margi
 var ICON_PAUSE_SM = '<div style="display:flex; gap:4px;"><div style="width:4px; height:15px; background:#3b3651; border-radius:2px;"></div><div style="width:4px; height:15px; background:#3b3651; border-radius:2px;"></div></div>';
 var ICON_PLAY_LG = '<svg width="22" height="26" viewBox="0 0 22 26" style="margin-left:4px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>';
 var ICON_PAUSE_LG = '<div style="display:flex; gap:6px;"><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div></div>';
+
+/* shuffle button: crossed arrows = shuffle all, ordered list = play in order */
+var ICON_SHUFFLE_ON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>';
+var ICON_SHUFFLE_OFF = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line><polyline points="16 15 19 18 16 21"></polyline></svg>';
+/* repeat button, indexed by mode: 0 off, 1 repeat one, 2 repeat playlist, 3 play single & stop */
+var ICON_REPEAT = [
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="19" y2="12"></line><polyline points="13 6 19 12 13 18"></polyline></svg>',
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path><text x="12" y="15" font-size="9" stroke-width="1" fill="currentColor" text-anchor="middle">1</text></svg>',
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>',
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><text x="8" y="17" font-size="13" stroke-width="1" fill="currentColor" text-anchor="middle">1</text><rect x="14" y="9" width="6" height="6" fill="currentColor" stroke="none"></rect></svg>'
+];
+var REPEAT_TITLES = ['Play queue through', 'Repeat one song', 'Repeat playlist', 'Play single song and stop'];
 
 var poetScreenUrl = '/screens/library';
 var poetSeeking = false;
@@ -236,6 +263,30 @@ function poetToast(msg) {
 
 function closeMenus() {
   document.querySelectorAll('.menu-slot').forEach(function (m) { m.innerHTML = ''; });
+  document.querySelectorAll('.row.menu-open').forEach(function (r) { r.classList.remove('menu-open'); });
+}
+
+function openQueue() {
+  htmx.ajax('GET', '/partial/queue', { target: '#queue-root', swap: 'innerHTML' });
+}
+function closeQueue() {
+  document.getElementById('queue-root').innerHTML = '';
+}
+
+/* keep an opened context menu fully on screen: flip upward near the bottom edge */
+function positionMenu(menu) {
+  menu.style.top = ''; menu.style.bottom = '';
+  var r = menu.getBoundingClientRect();
+  var limit = window.innerHeight - 78; /* keep clear of the media tray */
+  if (r.bottom > limit) {
+    menu.style.top = 'auto';
+    menu.style.bottom = '52px';
+    var r2 = menu.getBoundingClientRect();
+    if (r2.top < 8) {
+      menu.style.bottom = 'auto';
+      menu.style.top = Math.max(8 - r.top + 52, 52 - (r.bottom - limit)) + 'px';
+    }
+  }
 }
 
 document.addEventListener('click', function (e) {
@@ -248,6 +299,13 @@ document.body.addEventListener('poet-close-modal', function () { document.getEle
 document.body.addEventListener('poet-goto', function (e) { closeMenus(); poetGo(e.detail.value || e.detail); });
 
 document.body.addEventListener('htmx:afterSwap', function (e) {
+  var t = e.detail.target;
+  if (t && t.classList && t.classList.contains('menu-slot')) {
+    var row = t.closest('.row');
+    if (row) row.classList.add('menu-open');
+    var menu = t.querySelector('.menu');
+    if (menu) positionMenu(menu);
+  }
   if (e.detail.target && e.detail.target.id === 'main-container') {
     var path = e.detail.pathInfo && (e.detail.pathInfo.finalRequestPath || e.detail.pathInfo.requestPath);
     if (path && path.indexOf('/screens/') === 0) poetScreenUrl = path;
@@ -323,13 +381,23 @@ function applyState(s) {
     var play = document.getElementById('np-play');
     if (play) play.innerHTML = s.playing ? ICON_PAUSE_LG : ICON_PLAY_LG;
     var sh = document.getElementById('np-shuffle');
-    if (sh) sh.classList.toggle('on', s.shuffle);
+    if (sh) {
+      sh.classList.toggle('on', s.shuffle);
+      var shIcon = s.shuffle ? ICON_SHUFFLE_ON : ICON_SHUFFLE_OFF;
+      if (sh._icon !== shIcon) { sh._icon = shIcon; sh.innerHTML = shIcon; sh.title = s.shuffle ? 'Shuffle all' : 'Play in order'; }
+    }
     var rp = document.getElementById('np-repeat');
-    if (rp) { rp.classList.toggle('on', s.repeat !== 0); rp.innerHTML = s.repeat === 1 ? '↻&sup1;' : '↻'; }
+    if (rp) {
+      rp.classList.toggle('on', s.repeat !== 0);
+      var rpIcon = ICON_REPEAT[s.repeat] || ICON_REPEAT[0];
+      if (rp._icon !== rpIcon) { rp._icon = rpIcon; rp.innerHTML = rpIcon; rp.title = REPEAT_TITLES[s.repeat] || REPEAT_TITLES[0]; }
+    }
     var sp = document.getElementById('np-speed');
-    if (sp) sp.textContent = s.speed.toFixed(2).replace(/0$/, '').replace(/\.0$/, '.0') + '×';
+    if (sp) sp.textContent = s.speed.toFixed(2).replace(/0$/, '').replace(/\.0$/, '.0') + 'x';
     var sl = document.getElementById('np-sleep');
-    if (sl) sl.textContent = s.sleep >= 0 ? '☾ ' + Math.ceil(s.sleep / 60000) + 'm' : '☾ Sleep';
+    if (sl) sl.textContent = s.sleep >= 0 ? 'sleep ' + Math.ceil(s.sleep / 60000) + 'm' : 'sleep';
+    var fv = document.getElementById('np-fav');
+    if (fv) fv.classList.toggle('on', !!s.fav);
     var deck = document.getElementById('lyrics-deck');
     if (deck) {
       var lines = deck.querySelectorAll('.lyric'), active = null;
@@ -369,6 +437,7 @@ function setAccent(c) {
   r.setProperty('--accent-soft', c + '66');
   r.setProperty('--accent-shadow', c + '80');
   window.POET.accent = c;
+  if (window.PoetNative && PoetNative.setStatusBarColor) PoetNative.setStatusBarColor(c);
   fetch('/api/settings/accent', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'c=' + encodeURIComponent(c) });
   document.querySelectorAll('.swatch').forEach(function (s) { s.classList.toggle('on', s.getAttribute('data-c') === c); });
 }
@@ -396,6 +465,7 @@ document.addEventListener('DOMContentLoaded', function () {
 /* back-button support: Android calls poetBack() */
 function poetBack() {
   if (document.getElementById('modal-root').innerHTML !== '') { document.getElementById('modal-root').innerHTML = ''; return 'handled'; }
+  if (document.getElementById('queue-root').innerHTML !== '') { closeQueue(); return 'handled'; }
   if (document.querySelector('.menu')) { closeMenus(); return 'handled'; }
   if (poetScreenUrl !== '/screens/library') { poetGo('/screens/library'); return 'handled'; }
   return 'exit';

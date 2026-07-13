@@ -3,10 +3,12 @@ package com.musa.poetmusic
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -15,6 +17,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.playback.PlaybackService
 import com.musa.poetmusic.server.PoetServer
@@ -49,6 +52,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Status bar follows the user's accent color instead of the theme default.
+        applyStatusBarColor((application as PoetApp).db.getSetting("accent", "#b9a5ec"))
+
         startService(Intent(this, PlaybackService::class.java))
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -70,6 +76,7 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
         }
+        web.addJavascriptInterface(PoetNativeBridge(), "PoetNative")
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -88,6 +95,22 @@ class MainActivity : AppCompatActivity() {
         })
 
         loadWhenServerReady()
+    }
+
+    private fun applyStatusBarColor(hex: String) {
+        val color = runCatching { Color.parseColor(hex) }.getOrNull() ?: return
+        window.statusBarColor = color
+        // Pastel accents are light, so keep the status bar icons dark.
+        val luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = luminance > 0.5
+    }
+
+    /** Exposed to the WebView so the frontend can drive native chrome. */
+    inner class PoetNativeBridge {
+        @JavascriptInterface
+        fun setStatusBarColor(hex: String) {
+            runOnUiThread { if (!isDestroyed) applyStatusBarColor(hex) }
+        }
     }
 
     private fun loadWhenServerReady() {
