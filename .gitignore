@@ -9,3 +9,6 @@
 
 # Ignore Gradle build output directory
 build
+
+# Machine-specific SDK location
+local.properties

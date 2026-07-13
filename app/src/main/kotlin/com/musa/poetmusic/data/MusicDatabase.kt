@@ -1,0 +1,318 @@
+package com.musa.poetmusic.data
+
+import android.content.ContentValues
+import android.content.Context
+import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+
+class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 1) {
+
+    override fun onCreate(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE tracks(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uri TEXT UNIQUE NOT NULL,
+                parent_uri TEXT NOT NULL DEFAULT '',
+                display_name TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                artist TEXT NOT NULL DEFAULT 'Unknown artist',
+                album TEXT NOT NULL DEFAULT 'Unknown album',
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                track_no INTEGER NOT NULL DEFAULT 0,
+                has_art INTEGER NOT NULL DEFAULT 0,
+                lrc_uri TEXT,
+                folder_id INTEGER NOT NULL DEFAULT 0,
+                favorite INTEGER NOT NULL DEFAULT 0,
+                date_added INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+        db.execSQL(
+            """CREATE TABLE folders(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tree_uri TEXT UNIQUE NOT NULL,
+                display_path TEXT NOT NULL
+            )"""
+        )
+        db.execSQL(
+            """CREATE TABLE playlists(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )"""
+        )
+        db.execSQL(
+            """CREATE TABLE playlist_tracks(
+                playlist_id INTEGER NOT NULL,
+                track_id INTEGER NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY(playlist_id, track_id)
+            )"""
+        )
+        db.execSQL(
+            """CREATE TABLE settings(
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )"""
+        )
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+
+    // ---------- settings ----------
+
+    @Synchronized
+    fun getSetting(key: String, default: String): String {
+        readableDatabase.rawQuery("SELECT value FROM settings WHERE key=?", arrayOf(key)).use { c ->
+            return if (c.moveToFirst()) c.getString(0) else default
+        }
+    }
+
+    @Synchronized
+    fun setSetting(key: String, value: String) {
+        val cv = ContentValues().apply { put("key", key); put("value", value) }
+        writableDatabase.insertWithOnConflict("settings", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    // ---------- folders ----------
+
+    @Synchronized
+    fun addFolder(treeUri: String, displayPath: String): Long {
+        val cv = ContentValues().apply { put("tree_uri", treeUri); put("display_path", displayPath) }
+        return writableDatabase.insertWithOnConflict("folders", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    @Synchronized
+    fun removeFolder(id: Long) {
+        writableDatabase.delete("tracks", "folder_id=?", arrayOf(id.toString()))
+        writableDatabase.delete("folders", "id=?", arrayOf(id.toString()))
+        pruneOrphanPlaylistEntries()
+    }
+
+    @Synchronized
+    fun folders(): List<MusicFolder> {
+        val out = mutableListOf<MusicFolder>()
+        readableDatabase.rawQuery("SELECT id, tree_uri, display_path FROM folders ORDER BY id", null).use { c ->
+            while (c.moveToNext()) out += MusicFolder(c.getLong(0), c.getString(1), c.getString(2))
+        }
+        return out
+    }
+
+    // ---------- tracks ----------
+
+    @Synchronized
+    fun upsertTrack(
+        uri: String, parentUri: String, displayName: String, title: String, artist: String,
+        album: String, durationMs: Long, trackNo: Int, hasArt: Boolean, lrcUri: String?, folderId: Long
+    ) {
+        val db = writableDatabase
+        val cv = ContentValues().apply {
+            put("uri", uri); put("parent_uri", parentUri); put("display_name", displayName)
+            put("title", title); put("artist", artist); put("album", album)
+            put("duration_ms", durationMs); put("track_no", trackNo)
+            put("has_art", if (hasArt) 1 else 0); put("lrc_uri", lrcUri); put("folder_id", folderId)
+        }
+        val updated = db.update("tracks", cv, "uri=?", arrayOf(uri))
+        if (updated == 0) {
+            cv.put("date_added", System.currentTimeMillis())
+            db.insert("tracks", null, cv)
+        }
+    }
+
+    @Synchronized
+    fun deleteMissingInFolder(folderId: Long, seenUris: Set<String>) {
+        val db = writableDatabase
+        val stale = mutableListOf<Long>()
+        db.rawQuery("SELECT id, uri FROM tracks WHERE folder_id=?", arrayOf(folderId.toString())).use { c ->
+            while (c.moveToNext()) if (c.getString(1) !in seenUris) stale += c.getLong(0)
+        }
+        stale.forEach { db.delete("tracks", "id=?", arrayOf(it.toString())) }
+        if (stale.isNotEmpty()) pruneOrphanPlaylistEntries()
+    }
+
+    private fun pruneOrphanPlaylistEntries() {
+        writableDatabase.execSQL("DELETE FROM playlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)")
+    }
+
+    private fun trackFrom(c: Cursor) = Track(
+        id = c.getLong(0), uri = c.getString(1), parentUri = c.getString(2), displayName = c.getString(3),
+        title = c.getString(4), artist = c.getString(5), album = c.getString(6), durationMs = c.getLong(7),
+        trackNo = c.getInt(8), hasArt = c.getInt(9) == 1, lrcUri = c.getString(10), folderId = c.getLong(11),
+        favorite = c.getInt(12) == 1, dateAdded = c.getLong(13)
+    )
+
+    private val trackCols =
+        "id, uri, parent_uri, display_name, title, artist, album, duration_ms, track_no, has_art, lrc_uri, folder_id, favorite, date_added"
+
+    @Synchronized
+    fun tracks(query: String = "", sort: String = "title"): List<Track> {
+        val order = when (sort) {
+            "artist" -> "artist COLLATE NOCASE, title COLLATE NOCASE"
+            "recent" -> "date_added DESC"
+            "duration" -> "duration_ms DESC"
+            else -> "title COLLATE NOCASE"
+        }
+        val out = mutableListOf<Track>()
+        val (where, args) = if (query.isBlank()) "" to emptyArray<String>()
+        else "WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?" to arrayOf("%$query%", "%$query%", "%$query%")
+        readableDatabase.rawQuery("SELECT $trackCols FROM tracks $where ORDER BY $order", args).use { c ->
+            while (c.moveToNext()) out += trackFrom(c)
+        }
+        return out
+    }
+
+    @Synchronized
+    fun track(id: Long): Track? {
+        readableDatabase.rawQuery("SELECT $trackCols FROM tracks WHERE id=?", arrayOf(id.toString())).use { c ->
+            return if (c.moveToFirst()) trackFrom(c) else null
+        }
+    }
+
+    @Synchronized
+    fun tracksForAlbum(album: String, artist: String): List<Track> {
+        val out = mutableListOf<Track>()
+        readableDatabase.rawQuery(
+            "SELECT $trackCols FROM tracks WHERE album=? AND artist=? ORDER BY track_no, title COLLATE NOCASE",
+            arrayOf(album, artist)
+        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
+        return out
+    }
+
+    @Synchronized
+    fun tracksForArtist(artist: String): List<Track> {
+        val out = mutableListOf<Track>()
+        readableDatabase.rawQuery(
+            "SELECT $trackCols FROM tracks WHERE artist=? ORDER BY album COLLATE NOCASE, track_no, title COLLATE NOCASE",
+            arrayOf(artist)
+        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
+        return out
+    }
+
+    @Synchronized
+    fun favorites(): List<Track> {
+        val out = mutableListOf<Track>()
+        readableDatabase.rawQuery(
+            "SELECT $trackCols FROM tracks WHERE favorite=1 ORDER BY title COLLATE NOCASE", null
+        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
+        return out
+    }
+
+    @Synchronized
+    fun setFavorite(id: Long, fav: Boolean) {
+        writableDatabase.execSQL("UPDATE tracks SET favorite=? WHERE id=?", arrayOf(if (fav) 1 else 0, id))
+    }
+
+    @Synchronized
+    fun updateTags(id: Long, title: String, artist: String, album: String) {
+        val cv = ContentValues().apply { put("title", title); put("artist", artist); put("album", album) }
+        writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
+    }
+
+    @Synchronized
+    fun removeTrack(id: Long) {
+        writableDatabase.delete("tracks", "id=?", arrayOf(id.toString()))
+        writableDatabase.delete("playlist_tracks", "track_id=?", arrayOf(id.toString()))
+    }
+
+    @Synchronized
+    fun trackCount(): Int {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM tracks", null).use { c ->
+            return if (c.moveToFirst()) c.getInt(0) else 0
+        }
+    }
+
+    // ---------- albums / artists ----------
+
+    @Synchronized
+    fun albums(): List<AlbumRow> {
+        val out = mutableListOf<AlbumRow>()
+        readableDatabase.rawQuery(
+            """SELECT album, artist, COUNT(*), MIN(id) FROM tracks
+               GROUP BY album, artist ORDER BY album COLLATE NOCASE""", null
+        ).use { c -> while (c.moveToNext()) out += AlbumRow(c.getString(0), c.getString(1), c.getInt(2), c.getLong(3)) }
+        return out
+    }
+
+    @Synchronized
+    fun artists(): List<ArtistRow> {
+        val out = mutableListOf<ArtistRow>()
+        readableDatabase.rawQuery(
+            """SELECT artist, COUNT(*), MIN(id) FROM tracks
+               GROUP BY artist ORDER BY artist COLLATE NOCASE""", null
+        ).use { c -> while (c.moveToNext()) out += ArtistRow(c.getString(0), c.getInt(1), c.getLong(2)) }
+        return out
+    }
+
+    // ---------- playlists ----------
+
+    @Synchronized
+    fun createPlaylist(name: String): Long {
+        val cv = ContentValues().apply { put("name", name); put("created_at", System.currentTimeMillis()) }
+        return writableDatabase.insert("playlists", null, cv)
+    }
+
+    @Synchronized
+    fun renamePlaylist(id: Long, name: String) {
+        val cv = ContentValues().apply { put("name", name) }
+        writableDatabase.update("playlists", cv, "id=?", arrayOf(id.toString()))
+    }
+
+    @Synchronized
+    fun deletePlaylist(id: Long) {
+        writableDatabase.delete("playlist_tracks", "playlist_id=?", arrayOf(id.toString()))
+        writableDatabase.delete("playlists", "id=?", arrayOf(id.toString()))
+    }
+
+    @Synchronized
+    fun playlists(): List<Playlist> {
+        val out = mutableListOf<Playlist>()
+        readableDatabase.rawQuery(
+            """SELECT p.id, p.name, COUNT(pt.track_id) FROM playlists p
+               LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
+               GROUP BY p.id, p.name ORDER BY p.created_at""", null
+        ).use { c -> while (c.moveToNext()) out += Playlist(c.getLong(0), c.getString(1), c.getInt(2)) }
+        return out
+    }
+
+    @Synchronized
+    fun playlist(id: Long): Playlist? {
+        readableDatabase.rawQuery(
+            """SELECT p.id, p.name, COUNT(pt.track_id) FROM playlists p
+               LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
+               WHERE p.id=? GROUP BY p.id, p.name""", arrayOf(id.toString())
+        ).use { c -> return if (c.moveToFirst() && !c.isNull(0)) Playlist(c.getLong(0), c.getString(1), c.getInt(2)) else null }
+    }
+
+    @Synchronized
+    fun addToPlaylist(playlistId: Long, trackId: Long) {
+        val db = writableDatabase
+        var next = 0
+        db.rawQuery(
+            "SELECT COALESCE(MAX(position),-1)+1 FROM playlist_tracks WHERE playlist_id=?",
+            arrayOf(playlistId.toString())
+        ).use { c -> if (c.moveToFirst()) next = c.getInt(0) }
+        val cv = ContentValues().apply {
+            put("playlist_id", playlistId); put("track_id", trackId); put("position", next)
+        }
+        db.insertWithOnConflict("playlist_tracks", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    @Synchronized
+    fun removeFromPlaylist(playlistId: Long, trackId: Long) {
+        writableDatabase.delete(
+            "playlist_tracks", "playlist_id=? AND track_id=?",
+            arrayOf(playlistId.toString(), trackId.toString())
+        )
+    }
+
+    @Synchronized
+    fun playlistTracks(playlistId: Long): List<Track> {
+        val out = mutableListOf<Track>()
+        readableDatabase.rawQuery(
+            """SELECT ${trackCols.split(", ").joinToString(", ") { "t.$it" }}
+               FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
+               WHERE pt.playlist_id=? ORDER BY pt.position""", arrayOf(playlistId.toString())
+        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
+        return out
+    }
+}
