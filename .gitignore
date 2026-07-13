@@ -8,4 +8,7 @@
 .kotlin
 
 # Ignore Gradle build output directory
-buildlocal.properties
+build
+
+# Machine-specific SDK location
+local.properties
