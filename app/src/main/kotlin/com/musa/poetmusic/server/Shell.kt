@@ -177,7 +177,7 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
     </div>
   </div>
 
-  <div id="main-container" hx-get="/screens/library" hx-trigger="load" hx-target="this"></div>
+  <div id="main-container"></div>
 
   <div id="tray">
     <div id="tray-progress"></div>
@@ -193,7 +193,7 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
         <button class="tray-btn" hx-post="/api/player/prev" hx-swap="none">
           <svg width="14" height="11" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>
         </button>
-        <button class="tray-play" id="tray-play" hx-post="/api/player/toggle" hx-swap="none"></button>
+        <button class="tray-play" id="tray-play" data-icon="play" hx-post="/api/player/toggle" hx-swap="none"><svg width="14" height="16" viewBox="0 0 22 26" style="margin-left:3px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg></button>
         <button class="tray-btn" hx-post="/api/player/next" hx-swap="none">
           <svg width="14" height="11" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>
         </button>
@@ -215,7 +215,6 @@ var ICON_PAUSE_LG = '<div style="display:flex; gap:6px;"><div style="width:6px; 
 
 var poetScreenUrl = '/screens/library';
 var poetSeeking = false;
-var poetShownTrack = -1;
 var poetTrayTrack = -2;
 var poetLastState = null;
 
@@ -254,7 +253,6 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
     var lib = document.getElementById('nav-library'), set = document.getElementById('nav-settings');
     lib.classList.toggle('active', poetScreenUrl.indexOf('/screens/settings') !== 0);
     set.classList.toggle('active', poetScreenUrl.indexOf('/screens/settings') === 0);
-    poetShownTrack = -1; // force refresh of now-playing fields
     window.scrollTo(0, 0);
   }
 });
@@ -288,11 +286,19 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
 })();
 
 /* ---- live playback state poller ---- */
+function setPlayIcon(btn, playing, pauseIcon, playIcon) {
+  var want = playing ? 'pause' : 'play';
+  if (btn.getAttribute('data-icon') !== want) {
+    btn.setAttribute('data-icon', want);
+    btn.innerHTML = playing ? pauseIcon : playIcon;
+  }
+}
+
 function applyState(s) {
   poetLastState = s;
   var pct = s.dur > 0 ? (s.pos / s.dur * 100) : 0;
   document.getElementById('tray-progress').style.width = pct + '%';
-  document.getElementById('tray-play').innerHTML = s.playing ? ICON_PAUSE_SM : ICON_PLAY_SM;
+  setPlayIcon(document.getElementById('tray-play'), s.playing, ICON_PAUSE_SM, ICON_PLAY_SM);
   if (s.trackId !== poetTrayTrack) {
     poetTrayTrack = s.trackId;
     document.getElementById('tray-title').textContent = s.title;
@@ -306,11 +312,23 @@ function applyState(s) {
 
   var np = document.getElementById('np-root');
   if (np) {
-    if (s.trackId !== poetShownTrack && s.trackId >= 0) {
-      poetShownTrack = s.trackId;
-      var lyricsOpen = !!document.querySelector('#lyrics-deck .lyric');
-      htmx.ajax('GET', '/screens/now-playing' + (lyricsOpen ? '?lyrics=1' : ''), { target: '#main-container', swap: 'innerHTML' });
+    var shown = Number(np.getAttribute('data-track-id'));
+    if (s.trackId >= 0 && shown < 0) {
+      // Transition from the "nothing playing" placeholder: render the full screen once.
+      htmx.ajax('GET', '/screens/now-playing', { target: '#main-container', swap: 'innerHTML' });
       return;
+    }
+    if (s.trackId >= 0 && s.trackId !== shown) {
+      // Track changed: patch the fields in place, no full-screen reload.
+      np.setAttribute('data-track-id', s.trackId);
+      var el = document.getElementById('np-title'); if (el) el.textContent = s.title;
+      el = document.getElementById('np-artist'); if (el) el.textContent = s.artist;
+      var img = document.querySelector('#np-root .np-art img');
+      if (img) img.src = '/api/art/' + s.trackId;
+      var deckEl = document.getElementById('lyrics-deck');
+      if (deckEl && deckEl.innerHTML.trim() !== '') {
+        htmx.ajax('GET', '/api/player/lyrics', { target: deckEl, swap: 'innerHTML' });
+      }
     }
     var slider = document.getElementById('np-slider');
     if (slider && !poetSeeking) {
@@ -321,11 +339,18 @@ function applyState(s) {
       document.getElementById('np-tot').textContent = fmt(s.dur);
     }
     var play = document.getElementById('np-play');
-    if (play) play.innerHTML = s.playing ? ICON_PAUSE_LG : ICON_PLAY_LG;
+    if (play) setPlayIcon(play, s.playing, ICON_PAUSE_LG, ICON_PLAY_LG);
     var sh = document.getElementById('np-shuffle');
     if (sh) sh.classList.toggle('on', s.shuffle);
     var rp = document.getElementById('np-repeat');
-    if (rp) { rp.classList.toggle('on', s.repeat !== 0); rp.innerHTML = s.repeat === 1 ? '↻&sup1;' : '↻'; }
+    if (rp) {
+      rp.classList.toggle('on', s.repeat !== 0);
+      var rIcon = s.repeat === 1 ? 'one' : 'all';
+      if (rp.getAttribute('data-icon') !== rIcon) {
+        rp.setAttribute('data-icon', rIcon);
+        rp.innerHTML = s.repeat === 1 ? '↻&sup1;' : '↻';
+      }
+    }
     var sp = document.getElementById('np-speed');
     if (sp) sp.textContent = s.speed.toFixed(2).replace(/0$/, '').replace(/\.0$/, '.0') + '×';
     var sl = document.getElementById('np-sleep');
@@ -388,7 +413,9 @@ function dismissTip() {
 }
 document.addEventListener('DOMContentLoaded', function () {
   if (window.POET.folders === 0 && localStorage.getItem('poet-tip-dismissed') !== '1') {
-    setTimeout(function () { poetGo('/screens/settings?tip=1'); }, 250);
+    poetGo('/screens/settings?tip=1');
+  } else {
+    poetGo('/screens/library');
   }
   poetPoll();
 });

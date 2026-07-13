@@ -335,7 +335,7 @@ object Views {
           <button class="backlink" hx-get="/screens/library" hx-target="#main-container">← Library</button>
           <div style="display:flex; flex-direction:column; align-items:center;">
             <div class="np-art" style="background:repeating-linear-gradient(45deg, $artBg, $artBg 14px, #ffffff 14px, #ffffff 28px);">
-              ${if (track?.hasArt == true) """<img src="/api/art/${s.trackId}" alt="album art">""" else ""}
+              <img src="/api/art/${s.trackId}" alt="album art">
             </div>
             <div id="np-title" style="font-size:22px; font-weight:700; letter-spacing:-0.02em; text-align:center;">${esc(s.title)}</div>
             <div id="np-artist" style="font-size:14px; color:var(--muted); margin-top:4px; margin-bottom:20px;">${esc(s.artist)}</div>
@@ -354,7 +354,12 @@ object Views {
               <button class="np-side" hx-post="/api/player/prev" hx-swap="none">
                 <svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>
               </button>
-              <button id="np-play" class="np-main" hx-post="/api/player/toggle" hx-swap="none"></button>
+              <button id="np-play" class="np-main" data-icon="${if (s.playing) "pause" else "play"}" hx-post="/api/player/toggle" hx-swap="none">${
+                if (s.playing)
+                    """<div style="display:flex; gap:6px;"><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div></div>"""
+                else
+                    """<svg width="22" height="26" viewBox="0 0 22 26" style="margin-left:4px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>"""
+              }</button>
               <button class="np-side" hx-post="/api/player/next" hx-swap="none">
                 <svg width="18" height="14" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>
               </button>
@@ -369,7 +374,7 @@ object Views {
             <div id="sleep-slot" class="menu-slot" style="position:relative; width:100%;"></div>
 
             <div id="lyrics-deck-wrap" style="width:100%;">
-              <div id="lyrics-deck"${if (lyricsOpen) """ hx-get="/api/player/lyrics" hx-trigger="load" hx-swap="innerHTML"""" else ""}></div>
+              <div id="lyrics-deck"${if (lyricsOpen) """ hx-get="/api/player/lyrics" hx-trigger="load" hx-target="this" hx-swap="innerHTML"""" else ""}></div>
             </div>
           </div>
         </div>
@@ -455,7 +460,7 @@ object Views {
 
           <div class="card">
             <div class="card-title">Library scan</div>
-            <div id="scan-card" hx-get="/partial/scan" hx-trigger="every 2s" hx-swap="innerHTML">${scanCard(db)}</div>
+            <div id="scan-card" hx-get="/partial/scan" hx-trigger="every 2s" hx-target="this" hx-swap="innerHTML">${scanCard(db)}</div>
           </div>
 
           <div class="card">
