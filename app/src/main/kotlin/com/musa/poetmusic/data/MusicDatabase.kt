@@ -147,7 +147,10 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     @Synchronized
     fun tracks(query: String = "", sort: String = "title"): List<Track> {
         val order = when (sort) {
+            "title_desc" -> "title COLLATE NOCASE DESC"
             "artist" -> "artist COLLATE NOCASE, title COLLATE NOCASE"
+            "artist_desc" -> "artist COLLATE NOCASE DESC, title COLLATE NOCASE"
+            "date_added" -> "date_added ASC, id ASC"
             "recent" -> "date_added DESC"
             "duration" -> "duration_ms DESC"
             else -> "title COLLATE NOCASE"
@@ -166,6 +169,21 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         readableDatabase.rawQuery("SELECT $trackCols FROM tracks WHERE id=?", arrayOf(id.toString())).use { c ->
             return if (c.moveToFirst()) trackFrom(c) else null
         }
+    }
+
+    /** Tracks looked up by id, returned in the order of [ids]; missing ids are skipped. */
+    @Synchronized
+    fun tracksByIds(ids: List<Long>): List<Track> {
+        if (ids.isEmpty()) return emptyList()
+        val byId = HashMap<Long, Track>(ids.size)
+        ids.chunked(500).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            readableDatabase.rawQuery(
+                "SELECT $trackCols FROM tracks WHERE id IN ($placeholders)",
+                chunk.map { it.toString() }.toTypedArray()
+            ).use { c -> while (c.moveToNext()) trackFrom(c).let { byId[it.id] = it } }
+        }
+        return ids.mapNotNull { byId[it] }
     }
 
     @Synchronized

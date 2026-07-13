@@ -75,9 +75,13 @@ object PoetServer {
                 // ---------- screens ----------
 
                 get("/screens/library") {
-                    val tab = call.request.queryParameters["tab"] ?: "songs"
+                    // Tab and sort fall back to the persisted state so the library
+                    // looks the same after navigating away or restarting the app.
+                    val tab = call.request.queryParameters["tab"]?.also { db.setSetting("lib_tab", it) }
+                        ?: db.getSetting("lib_tab", "songs")
                     val q = call.request.queryParameters["q"] ?: ""
-                    val sort = call.request.queryParameters["sort"] ?: "title"
+                    val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
+                        ?: db.getSetting("lib_sort", "title")
                     call.respondText(Views.libraryScreen(db, tab, q, sort), ContentType.Text.Html)
                 }
 
@@ -115,9 +119,14 @@ object PoetServer {
 
                 get("/partial/songs") {
                     val q = call.request.queryParameters["q"] ?: ""
-                    val sort = call.request.queryParameters["sort"] ?: "title"
+                    val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
+                        ?: db.getSetting("lib_sort", "title")
                     val ctx = QueueCtx("songs", q, sort)
                     call.respondText(Views.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                }
+
+                get("/partial/queue") {
+                    call.respondText(Views.queueDrawer(PlayerController.queueItems()), ContentType.Text.Html)
                 }
 
                 get("/partial/scan") {
@@ -132,9 +141,10 @@ object PoetServer {
 
                 get("/api/player/state") {
                     val s = PlayerController.snapshot
+                    val fav = s.trackId >= 0 && db.track(s.trackId)?.favorite == true
                     val json = """{"trackId":${s.trackId},"title":${jsonStr(s.title)},"artist":${jsonStr(s.artist)},""" +
                         """"pos":${s.positionMs},"dur":${s.durationMs},"playing":${s.playing},"shuffle":${s.shuffle},""" +
-                        """"repeat":${s.repeatMode},"speed":${s.speed},"sleep":${s.sleepRemainingMs},"hasQueue":${s.hasQueue}}"""
+                        """"repeat":${s.repeatMode},"speed":${s.speed},"sleep":${s.sleepRemainingMs},"hasQueue":${s.hasQueue},"fav":$fav}"""
                     call.respondText(json, ContentType.Application.Json)
                 }
 
@@ -168,6 +178,20 @@ object PoetServer {
                     val t = call.parameters["id"]?.toLongOrNull()?.let(db::track) ?: return@post noContent()
                     PlayerController.addToQueue(t)
                     toast("Added to queue: ${t.title}")
+                }
+
+                post("/api/player/favourite") {
+                    val s = PlayerController.snapshot
+                    val t = if (s.trackId >= 0) db.track(s.trackId) else null
+                    if (t == null) return@post toast("Nothing is playing")
+                    db.setFavorite(t.id, !t.favorite)
+                    toast(if (t.favorite) "Removed from Favourites" else "Added to Favourites ♥")
+                }
+
+                post("/api/player/jump/{index}") {
+                    val index = call.parameters["index"]?.toIntOrNull() ?: return@post noContent()
+                    PlayerController.jumpTo(index)
+                    noContent()
                 }
 
                 post("/api/player/toggle") { PlayerController.togglePlay(); noContent() }

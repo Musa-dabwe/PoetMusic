@@ -6,6 +6,7 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.musa.poetmusic.PoetApp
 
 /**
  * Foreground Media3 service. Owns the ExoPlayer instance so audio keeps
@@ -30,6 +31,8 @@ class PlaybackService : MediaSessionService() {
             .build()
         mediaSession = MediaSession.Builder(this, player).build()
         PlayerController.attach(player)
+        // Bring back the previous session's queue, position and playback modes.
+        (application as? PoetApp)?.let { PlayerController.restoreState(it.db) }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession

@@ -112,8 +112,13 @@ object Views {
               <div style="margin-top:16px;"><button class="btn-primary" hx-get="/screens/settings" hx-target="#main-container">Open Settings</button></div>
             </div>"""
         }
-        val sortOptions = listOf("title" to "Title", "artist" to "Artist", "recent" to "Recent", "duration" to "Length")
-            .joinToString("") { (v, l) -> """<option value="$v"${if (v == sort) " selected" else ""}>$l</option>""" }
+        val sortOptions = listOf(
+            "title" to "Title A-Z",
+            "title_desc" to "Title Z-A",
+            "artist_desc" to "Artist Descending",
+            "artist" to "Artist Ascending",
+            "date_added" to "Date Added"
+        ).joinToString("") { (v, l) -> """<option value="$v"${if (v == sort) " selected" else ""}>$l</option>""" }
         return """
         ${masterControls(ctx)}
         <div class="searchrow">
@@ -257,7 +262,8 @@ object Views {
             """<button hx-post="/api/playlist/${ctx.pid}/remove/${t.id}" hx-swap="none" onclick="closeMenus()">Remove from this playlist</button>"""
         } else ""
         return """
-        <div class="menu">
+        <div class="menu-shield" onclick="event.stopPropagation(); closeMenus()"></div>
+        <div class="menu" onclick="event.stopPropagation()">
           <button hx-post="/api/queue/next/${t.id}" hx-swap="none" onclick="closeMenus()">Play next</button>
           <button hx-post="/api/queue/add/${t.id}" hx-swap="none" onclick="closeMenus()">Add to queue</button>
           <button hx-get="/api/library/menu/${t.id}/playlists?${ctx.query()}" hx-target="closest .menu-slot" hx-swap="innerHTML">Add to playlist ›</button>
@@ -273,7 +279,8 @@ object Views {
             """<button hx-post="/api/playlist/${p.id}/add/${t.id}" hx-swap="none" onclick="closeMenus()">${esc(p.name)}</button>"""
         }
         return """
-        <div class="menu">
+        <div class="menu-shield" onclick="event.stopPropagation(); closeMenus()"></div>
+        <div class="menu" onclick="event.stopPropagation()">
           <button hx-get="/api/library/menu/${t.id}?${ctx.query()}" hx-target="closest .menu-slot" hx-swap="innerHTML">‹ Back</button>
           $items
           <form class="menu-form" hx-post="/api/playlist/create?trackId=${t.id}" hx-swap="none" hx-on::after-request="closeMenus()">
@@ -310,6 +317,24 @@ object Views {
         </div>"""
 
     // ---------------- now playing ----------------
+
+    /** Shuffle button icon: crossed arrows when shuffling, ordered list when playing in order. */
+    fun shuffleIcon(on: Boolean): String = if (on)
+        """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>"""
+    else
+        """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line><polyline points="16 15 19 18 16 21"></polyline></svg>"""
+
+    /** Repeat button icon for the four playback modes (see PlayerController repeat codes). */
+    fun repeatIcon(mode: Int): String = when (mode) {
+        1 -> // repeat one song
+            """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path><text x="12" y="15" font-size="9" stroke-width="1" fill="currentColor" text-anchor="middle">1</text></svg>"""
+        2 -> // repeat playlist
+            """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>"""
+        3 -> // play single song and stop
+            """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><text x="8" y="17" font-size="13" stroke-width="1" fill="currentColor" text-anchor="middle">1</text><rect x="14" y="9" width="6" height="6" fill="currentColor" stroke="none"></rect></svg>"""
+        else -> // off: play queue through, then stop
+            """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="19" y2="12"></line><polyline points="13 6 19 12 13 18"></polyline></svg>"""
+    }
 
     fun nowPlayingScreen(db: MusicDatabase, lyricsOpen: Boolean): String {
         val s = PlayerController.snapshot
@@ -350,7 +375,7 @@ object Views {
             </div>
 
             <div style="display:flex; align-items:center; gap:18px; margin-top:18px;">
-              <button id="np-shuffle" class="np-dot${if (s.shuffle) " on" else ""}" hx-post="/api/player/shuffle" hx-swap="none">⇆</button>
+              <button id="np-shuffle" class="np-dot${if (s.shuffle) " on" else ""}" title="${if (s.shuffle) "Shuffle all" else "Play in order"}" hx-post="/api/player/shuffle" hx-swap="none">${shuffleIcon(s.shuffle)}</button>
               <button class="np-side" hx-post="/api/player/prev" hx-swap="none">
                 <svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>
               </button>
@@ -358,15 +383,17 @@ object Views {
               <button class="np-side" hx-post="/api/player/next" hx-swap="none">
                 <svg width="18" height="14" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>
               </button>
-              <button id="np-repeat" class="np-dot${if (s.repeatMode != 0) " on" else ""}" hx-post="/api/player/repeat" hx-swap="none">↻</button>
+              <button id="np-repeat" class="np-dot${if (s.repeatMode != 0) " on" else ""}" hx-post="/api/player/repeat" hx-swap="none">${repeatIcon(s.repeatMode)}</button>
             </div>
 
-            <div style="display:flex; align-items:center; gap:10px; margin-top:22px; flex-wrap:wrap; justify-content:center;">
-              <button id="np-speed" class="chip" hx-post="/api/player/speed" hx-swap="none">${speedLabel(s.speed)}×</button>
-              <button id="np-sleep" class="chip${if (s.sleepRemainingMs >= 0) " on" else ""}" hx-get="/partial/sleep-menu" hx-target="#sleep-slot" hx-swap="innerHTML">☾ Sleep</button>
-              <button class="chip" onclick="toggleLyrics(this)">${if (lyricsOpen) "Hide lyrics" else "Show lyrics"}</button>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:22px; flex-wrap:wrap; justify-content:center;">
+              <button id="np-speed" class="chip" hx-post="/api/player/speed" hx-swap="none">${speedLabel(s.speed)}x</button>
+              <button id="np-sleep" class="chip${if (s.sleepRemainingMs >= 0) " on" else ""}" hx-get="/partial/sleep-menu" hx-target="#sleep-slot" hx-swap="innerHTML">sleep</button>
+              <button id="np-lyrics" class="chip${if (lyricsOpen) " on" else ""}" onclick="toggleLyrics(this)">lyrics</button>
+              <button id="np-fav" class="chip${if (track?.favorite == true) " on" else ""}" hx-post="/api/player/favourite" hx-swap="none">favourite</button>
+              <button class="chip" onclick="openQueue()">queue</button>
             </div>
-            <div id="sleep-slot" class="menu-slot" style="position:relative; width:100%;"></div>
+            <div id="sleep-slot" class="menu-slot" style="position:relative; z-index:45; width:100%;"></div>
 
             <div id="lyrics-deck-wrap" style="width:100%;">
               <div id="lyrics-deck"${if (lyricsOpen) """ hx-get="/api/player/lyrics" hx-trigger="load" hx-swap="innerHTML"""" else ""}></div>
@@ -378,11 +405,11 @@ object Views {
             var deck = document.getElementById('lyrics-deck');
             if (deck.innerHTML.trim() === '') {
               htmx.ajax('GET', '/api/player/lyrics', { target: deck, swap: 'innerHTML' });
-              btn.textContent = 'Hide lyrics';
+              btn.classList.add('on');
               deck.parentElement.style.display = '';
             } else {
               deck.innerHTML = '';
-              btn.textContent = 'Show lyrics';
+              btn.classList.remove('on');
             }
           }
         </script>"""
@@ -397,13 +424,44 @@ object Views {
     }
 
     fun sleepMenu(): String = """
-        <div class="menu" style="left:50%; right:auto; top:6px; transform:translateX(-50%);">
+        <div class="menu-shield" onclick="event.stopPropagation(); closeMenus()"></div>
+        <div class="menu" onclick="event.stopPropagation()" style="left:50%; right:auto; top:6px; transform:translateX(-50%);">
           <button hx-post="/api/player/sleep?min=15" hx-swap="none" onclick="closeMenus()">In 15 minutes</button>
           <button hx-post="/api/player/sleep?min=30" hx-swap="none" onclick="closeMenus()">In 30 minutes</button>
           <button hx-post="/api/player/sleep?min=45" hx-swap="none" onclick="closeMenus()">In 45 minutes</button>
           <button hx-post="/api/player/sleep?min=60" hx-swap="none" onclick="closeMenus()">In 1 hour</button>
           <button hx-post="/api/player/sleep?min=0" hx-swap="none" onclick="closeMenus()">Turn off timer</button>
         </div>"""
+
+    // ---------------- queue drawer ----------------
+
+    /** Slide-up drawer listing the live play queue in its active shuffle order. */
+    fun queueDrawer(items: List<PlayerController.QueueItem>): String {
+        val body = if (items.isEmpty()) {
+            """<div class="empty">The queue is empty.<br>Pick a song from your library.</div>"""
+        } else {
+            items.mapIndexed { pos, it ->
+                """
+                <div class="row${if (it.current) " playing" else ""}" hx-post="/api/player/jump/${it.index}" hx-swap="none" onclick="closeQueue()">
+                  <div class="queue-num">${pos + 1}</div>
+                  <div class="row-main">
+                    <div class="row-title">${esc(it.title)}</div>
+                    <div class="row-sub">${esc(it.artist)}</div>
+                  </div>
+                  ${if (it.current) """<div style="font-size:11px; font-weight:700; color:var(--accent);">now</div>""" else ""}
+                </div>"""
+            }.joinToString("")
+        }
+        return """
+        <div class="queue-shield" onclick="closeQueue()"></div>
+        <div class="queue-panel">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            <div style="font-size:17px; font-weight:700; letter-spacing:-0.02em;">Up next <span style="font-size:12px; font-weight:600; color:var(--muted);">· ${items.size} songs</span></div>
+            <button class="pill" onclick="closeQueue()">Close</button>
+          </div>
+          <div class="queue-list">$body</div>
+        </div>"""
+    }
 
     // ---------------- settings ----------------
 
