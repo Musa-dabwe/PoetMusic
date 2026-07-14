@@ -1,6 +1,8 @@
 package com.musa.poetmusic
 
 import android.Manifest
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -22,6 +24,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.playback.PlaybackService
 import com.musa.poetmusic.server.PoetServer
+import com.musa.poetmusic.widget.PoetWidgetProvider
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.concurrent.thread
@@ -64,6 +67,9 @@ class MainActivity : AppCompatActivity() {
         PoetServer.addFolderRequester = {
             runOnUiThread { pickFolder.launch(null) }
         }
+        PoetServer.pinWidgetRequester = {
+            runOnUiThread { requestPinWidget() }
+        }
         LibraryScanner.onFinished = {
             runJs("poetToast('Library scan finished'); if (poetScreenUrl.indexOf('/screens/library') === 0) poetGo(poetScreenUrl);")
         }
@@ -73,6 +79,11 @@ class MainActivity : AppCompatActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
+            // Pinch and double-tap zoom would stretch the fixed pastel layout;
+            // the viewport meta and touch-action CSS in Shell.kt back this up.
+            setSupportZoom(false)
+            builtInZoomControls = false
+            displayZoomControls = false
         }
         web.addJavascriptInterface(PoetNativeBridge(), "PoetNative")
         web.webChromeClient = WebChromeClient()
@@ -136,6 +147,16 @@ class MainActivity : AppCompatActivity() {
         if (missing.isNotEmpty()) askPermissions.launch(missing.toTypedArray())
     }
 
+    /** Ask the launcher to place the Poet widget; falls back to a how-to toast. */
+    private fun requestPinWidget() {
+        val mgr = getSystemService(AppWidgetManager::class.java) ?: return
+        if (mgr.isRequestPinAppWidgetSupported) {
+            mgr.requestPinAppWidget(ComponentName(this, PoetWidgetProvider::class.java), null, null)
+        } else {
+            runJs("poetToast('Long-press your home screen to add the Poet widget');")
+        }
+    }
+
     private fun applyStatusBarColor(hex: String) {
         val color = runCatching { Color.parseColor(hex) }.getOrNull() ?: return
         window.statusBarColor = color
@@ -183,6 +204,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         PoetServer.addFolderRequester = null
+        PoetServer.pinWidgetRequester = null
         // Drop the WebView disk cache (album art HTTP responses); 'false'
         // keeps cookies and DOM storage intact.
         if (::web.isInitialized) web.clearCache(false)

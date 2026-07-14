@@ -59,6 +59,13 @@ object PlayerController {
     @Volatile var snapshot = Snapshot(); private set
     @Volatile private var store: MusicDatabase? = null
 
+    /**
+     * Invoked on the main thread after every periodic snapshot refresh.
+     * PoetApp points this at the home screen widget so it can push
+     * RemoteViews updates when the track or play state actually changes.
+     */
+    @Volatile var onSnapshotRefreshed: ((Snapshot) -> Unit)? = null
+
     private var sleepDeadline: Long = -1
     private val sleepRunnable = Runnable {
         player?.pause()
@@ -71,6 +78,7 @@ object PlayerController {
     private val refresher = object : Runnable {
         override fun run() {
             refreshSnapshot()
+            onSnapshotRefreshed?.invoke(snapshot)
             persistIfDue()
             handler.postDelayed(this, 500)
         }

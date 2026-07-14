@@ -16,7 +16,7 @@ object Shell {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Poet Music</title>
 <script src="/assets/htmx.min.js"></script>
 <style>
@@ -40,7 +40,9 @@ object Shell {
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin:0; padding:0; }
 body { background: var(--bg); font-family:'Outfit', sans-serif; color: var(--ink); transition: background 0.25s;
-  -webkit-user-select:none; user-select:none; }
+  -webkit-user-select:none; user-select:none;
+  /* blocks pinch and double-tap zoom while keeping scroll + tap responsive */
+  touch-action: manipulation; }
 input, textarea { -webkit-user-select:text; user-select:text; }
 button { font-family: inherit; color: var(--ink); }
 @keyframes poet-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -180,7 +182,7 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
   border:1.5px solid rgba(59,54,81,0.12); background:#ffffff; outline:none; transition:border-color 0.15s, box-shadow 0.15s; }
 .field input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-faint); }
 
-/* notification widget block */
+/* home screen widget preview block (Settings) */
 .widget { background:var(--bg); border-radius:16px; padding:12px 14px; display:flex; align-items:center; gap:12px; }
 .widget-art { width:40px; height:40px; border-radius:10px; background:var(--accent-faint); flex-shrink:0;
   display:flex; align-items:center; justify-content:center; font-size:12px; color:rgba(59,54,81,0.55); overflow:hidden; }
@@ -293,7 +295,7 @@ var ICON_PAUSE_SM = '<div style="display:flex; gap:4px;"><div style="width:4px; 
 var ICON_PLAY_LG = '<svg width="22" height="26" viewBox="0 0 22 26" style="margin-left:4px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>';
 var ICON_PAUSE_LG = '<div style="display:flex; gap:6px;"><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div></div>';
 
-/* notification widget block */
+/* home screen widget preview block */
 var ICON_PLAY_W = '<svg width="11" height="13" viewBox="0 0 22 26" style="margin-left:2px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>';
 var ICON_PAUSE_W = '<div style="display:flex; gap:3px;"><div style="width:3px; height:12px; background:#3b3651; border-radius:2px;"></div><div style="width:3px; height:12px; background:#3b3651; border-radius:2px;"></div></div>';
 var ICON_HEART_ON = '<svg width="17" height="16" viewBox="0 0 24 22" style="animation:poet-pop 0.3s ease;"><path d="M12 21 C-6 10 3 -3 12 5 C21 -3 30 10 12 21 Z" fill="#e79ab0"></path></svg>';
@@ -322,7 +324,7 @@ function fmt(ms) {
   return m + ':' + (s < 10 ? '0' + s : s);
 }
 
-/* mm:ss with zero-padded minutes, for the notification widget */
+/* mm:ss with zero-padded minutes, for the widget preview */
 function fmtClock(ms) {
   var s = Math.floor(ms / 1000), m = Math.floor(s / 60); s = s % 60;
   return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
@@ -446,7 +448,7 @@ function applyState(s) {
     r.classList.toggle('playing', Number(r.getAttribute('data-track-id')) === s.trackId);
   });
 
-  /* notification widget block (Settings): live position + controls */
+  /* home screen widget preview (Settings): live position + controls */
   var wTime = document.getElementById('w-time');
   if (wTime) {
     wTime.textContent = fmtClock(s.pos);

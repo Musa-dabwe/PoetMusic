@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">PoetMusic</string>
+    <string name="widget_description">Pastel mini player — colors follow your in-app accent and canvas tint.</string>
+    <string name="playback_channel">Playback</string>
+    <string name="widget_prev">Previous</string>
+    <string name="widget_play_pause">Play or pause</string>
+    <string name="widget_next">Next</string>
+    <string name="widget_favourite">Favourite</string>
 </resources>
