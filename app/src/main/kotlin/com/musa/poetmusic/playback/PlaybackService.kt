@@ -28,6 +28,10 @@ class PlaybackService : MediaSessionService() {
                 /* handleAudioFocus = */ true
             )
             .setHandleAudioBecomingNoisy(true)
+            // Hold a partial wake lock while playing: without it Doze parks
+            // the CPU shortly after the app is minimized or the screen turns
+            // off, and local playback cuts out mid-song.
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         mediaSession = MediaSession.Builder(this, player).build()
         PlayerController.attach(player)

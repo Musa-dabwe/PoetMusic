@@ -47,7 +47,8 @@ class MainActivity : AppCompatActivity() {
         runJs("poetGo('/screens/settings');")
     }
 
-    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val askPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,11 +58,7 @@ class MainActivity : AppCompatActivity() {
 
         startService(Intent(this, PlaybackService::class.java))
 
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        requestStartupPermissions()
 
         PoetServer.addFolderRequester = {
             runOnUiThread { pickFolder.launch(null) }
@@ -95,6 +92,26 @@ class MainActivity : AppCompatActivity() {
         })
 
         loadWhenServerReady()
+    }
+
+    /**
+     * One combined system dialog at initial launch: broad storage access
+     * (READ_MEDIA_AUDIO on 13+, READ_EXTERNAL_STORAGE below) plus
+     * notifications (13+) so the media playback notification can show.
+     */
+    private fun requestStartupPermissions() {
+        val wanted = buildList {
+            if (Build.VERSION.SDK_INT >= 33) {
+                add(Manifest.permission.READ_MEDIA_AUDIO)
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+        val missing = wanted.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) askPermissions.launch(missing.toTypedArray())
     }
 
     private fun applyStatusBarColor(hex: String) {

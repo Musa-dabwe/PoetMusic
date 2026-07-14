@@ -3,6 +3,7 @@ package com.musa.poetmusic.server
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.LyricLine
 import com.musa.poetmusic.data.MusicDatabase
+import com.musa.poetmusic.data.Playlist
 import com.musa.poetmusic.data.Track
 import com.musa.poetmusic.playback.PlayerController
 
@@ -112,21 +113,52 @@ object Views {
               <div style="margin-top:16px;"><button class="btn-primary" hx-get="/screens/settings" hx-target="#main-container">Open Settings</button></div>
             </div>"""
         }
-        val sortOptions = listOf(
-            "title" to "Title A-Z",
-            "title_desc" to "Title Z-A",
-            "artist_desc" to "Artist Descending",
-            "artist" to "Artist Ascending",
-            "date_added" to "Date Added"
-        ).joinToString("") { (v, l) -> """<option value="$v"${if (v == sort) " selected" else ""}>$l</option>""" }
         return """
         ${masterControls(ctx)}
         <div class="searchrow">
           <input id="q" name="q" type="search" placeholder="Search songs, artists, albums…" value="${esc(q)}"
-                 hx-get="/partial/songs" hx-include="#sort" hx-trigger="input changed delay:300ms, search" hx-target="#song-list" hx-swap="innerHTML">
-          <select id="sort" name="sort" hx-get="/partial/songs" hx-include="#q" hx-trigger="change" hx-target="#song-list" hx-swap="innerHTML">$sortOptions</select>
+                 hx-get="/partial/songs" hx-trigger="input changed delay:300ms, search" hx-target="#song-list" hx-swap="innerHTML">
+          <button class="sortbtn" hx-get="/partial/sort-drawer" hx-target="#sheet-root" hx-swap="innerHTML" aria-label="Sort songs">
+            <svg width="14" height="12" viewBox="0 0 14 12"><rect x="0" y="1" width="14" height="2" rx="1" fill="currentColor"></rect><rect x="0" y="5" width="10" height="2" rx="1" fill="currentColor"></rect><rect x="0" y="9" width="6" height="2" rx="1" fill="currentColor"></rect></svg>
+            Sort
+          </button>
         </div>
         <div id="song-list">${songList(tracks, ctx)}</div>"""
+    }
+
+    /** The five sort states exposed by the pastel sort drawer, in display order. */
+    val SORT_STATES = listOf(
+        Triple("title-az", "title", "Title A-Z"),
+        Triple("title-za", "title_desc", "Title Z-A"),
+        Triple("artist-az", "artist", "Artist A-Z"),
+        Triple("artist-za", "artist_desc", "Artist Z-A"),
+        Triple("date-modified", "date_modified", "Date modified")
+    )
+
+    /**
+     * Touch-friendly bottom drawer replacing the native select: custom radio
+     * indicators, each option fires hx-get /api/library/sort?type=… at the
+     * tracklist container.
+     */
+    fun sortDrawer(currentSort: String): String {
+        val options = SORT_STATES.joinToString("") { (type, key, label) ->
+            val selected = key == currentSort
+            """
+            <button class="sortopt${if (selected) " active" else ""}"
+                    hx-get="/api/library/sort?type=$type" hx-include="#q"
+                    hx-target="#song-list" hx-swap="innerHTML"
+                    hx-on::after-request="closeSheet()">
+              <span class="radio">${if (selected) """<span class="radio-dot"></span>""" else ""}</span>
+              <span style="font-size:14px; font-weight:600;">$label</span>
+            </button>"""
+        }
+        return """
+        <div class="sheet-shield" onclick="closeSheet()"></div>
+        <div class="sheet">
+          <div class="sheet-grab"></div>
+          <div class="sheet-title" style="margin-bottom:14px;">Sort songs by</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">$options</div>
+        </div>"""
     }
 
     private fun albumsTab(db: MusicDatabase): String {
@@ -247,7 +279,7 @@ object Views {
           <button class="backlink" hx-get="/screens/library?tab=playlists" hx-target="#main-container">← Playlists</button>
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
             <div style="font-size:20px; font-weight:700; letter-spacing:-0.02em;">${esc(pl.name)}</div>
-            <button class="pill" hx-post="/api/playlist/${pl.id}/delete" hx-confirm="Delete playlist &quot;${esc(pl.name)}&quot;?" hx-swap="none">Delete</button>
+            <button class="pill" hx-get="/partial/confirm-playlist/${pl.id}" hx-target="#modal-root" hx-swap="innerHTML">Delete</button>
           </div>
           <div style="font-size:13px; color:var(--muted); margin-bottom:16px;">${tracks.size} songs</div>
           ${if (tracks.isNotEmpty()) masterControls(ctx) else ""}
@@ -268,9 +300,9 @@ object Views {
           <button hx-post="/api/queue/add/${t.id}" hx-swap="none" onclick="closeMenus()">Add to queue</button>
           <button hx-get="/api/library/menu/${t.id}/playlists?${ctx.query()}" hx-target="closest .menu-slot" hx-swap="innerHTML">Add to playlist ›</button>
           <button hx-post="/api/track/${t.id}/favorite" hx-swap="none" onclick="closeMenus()">${if (t.favorite) "Remove from favorites" else "Add to favorites ♥"}</button>
-          <button hx-get="/api/track/${t.id}/tags" hx-target="#modal-root" hx-swap="innerHTML" onclick="closeMenus()">Edit tags</button>
+          <button hx-get="/api/library/edit-tags/${t.id}" hx-target="#modal-root" hx-swap="innerHTML" onclick="closeMenus()">Edit tags</button>
           $removeFromPlaylist
-          <button hx-post="/api/track/${t.id}/remove" hx-confirm="Remove &quot;${esc(t.title)}&quot; from the library? The file is kept on disk." hx-swap="none" onclick="closeMenus()" style="color:#b85c5c;">Remove from library</button>
+          <button hx-get="/partial/confirm-track/${t.id}" hx-target="#modal-root" hx-swap="innerHTML" onclick="closeMenus()" style="color:#b85c5c;">Remove from library</button>
         </div>"""
     }
 
@@ -290,31 +322,85 @@ object Views {
         </div>"""
     }
 
-    // ---------------- tag editor modal ----------------
+    // ---------------- native-fidelity confirmation modal ----------------
 
-    fun tagEditorModal(t: Track): String = """
+    /**
+     * Pastel replacement for the WebView's "http://127.0.0.1 says" confirm()
+     * dialog: rounded 18px card over a blurred dim, borderless CANCEL that
+     * swaps an empty fragment into #modal-root, filled accent OK.
+     */
+    private fun confirmModal(title: String, messageHtml: String, okAttrs: String): String = """
         <div class="modal-shield" onclick="if(event.target===this) document.getElementById('modal-root').innerHTML=''">
-          <div class="modal">
-            <div style="font-size:17px; font-weight:700; letter-spacing:-0.02em;">Edit tags</div>
-            <div style="font-size:12px; color:var(--muted); margin-top:2px; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(t.displayName)}</div>
-            <form hx-post="/api/track/${t.id}/tags" hx-swap="none">
-              <label for="tag-title">Title</label>
-              <input id="tag-title" name="title" value="${esc(t.title)}" required>
-              <label for="tag-artist">Artist</label>
-              <input id="tag-artist" name="artist" value="${esc(t.artist)}">
-              <label for="tag-album">Album</label>
-              <input id="tag-album" name="album" value="${esc(t.album)}">
-              <div style="font-size:11px; color:var(--muted); margin-top:10px;">${
-                if (t.displayName.endsWith(".mp3", true)) "ID3v2 tags will be written into the MP3 file."
-                else "Non-MP3 file: tags are saved to the Poet library only."
-              }</div>
-              <div style="display:flex; gap:10px; margin-top:16px; justify-content:flex-end;">
-                <button type="button" class="pill" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
-                <button type="submit" class="btn-primary">Save tags</button>
-              </div>
-            </form>
+          <div class="confirm-card">
+            <div class="confirm-title">$title</div>
+            <div class="confirm-msg">$messageHtml</div>
+            <div class="confirm-actions">
+              <button class="btn-ghost" hx-get="/partial/empty" hx-target="#modal-root" hx-swap="innerHTML">CANCEL</button>
+              <button class="btn-primary confirm-ok" $okAttrs hx-swap="none"
+                      hx-on::after-request="document.getElementById('modal-root').innerHTML=''">OK</button>
+            </div>
           </div>
         </div>"""
+
+    fun confirmRemoveFolder(id: Long, displayPath: String): String {
+        val folderName = displayPath.trimEnd('/').substringAfterLast('/').ifBlank { displayPath }
+        return confirmModal(
+            "Remove folder",
+            """Are you sure you want to remove <span class="confirm-strong">${esc(folderName)}</span> from the library?""",
+            """hx-delete="/api/settings/folder?id=$id""""
+        )
+    }
+
+    fun confirmRemoveTrack(t: Track): String = confirmModal(
+        "Remove from library",
+        """Remove <span class="confirm-strong">${esc(t.title)}</span> from the library? The file is kept on disk.""",
+        """hx-post="/api/track/${t.id}/remove""""
+    )
+
+    fun confirmDeletePlaylist(pl: Playlist): String = confirmModal(
+        "Delete playlist",
+        """Delete the playlist <span class="confirm-strong">${esc(pl.name)}</span>? Its songs stay in the library.""",
+        """hx-post="/api/playlist/${pl.id}/delete""""
+    )
+
+    // ---------------- tag editor sheet ----------------
+
+    private fun tagField(label: String, name: String, value: String, numeric: Boolean = false, required: Boolean = false): String = """
+        <label class="field">
+          <span>$label</span>
+          <input type="text" name="$name" value="${esc(value)}"${if (numeric) """ inputmode="numeric"""" else ""}${if (required) " required" else ""}>
+        </label>"""
+
+    /**
+     * Slide-in bottom sheet for editing local file metadata; the persistent
+     * header button fires an hx-put form bundle at /api/library/edit-tags/{id}.
+     */
+    fun tagEditorSheet(t: Track): String = """
+        <div class="sheet-shield" onclick="document.getElementById('modal-root').innerHTML=''"></div>
+        <form class="sheet sheet-tall" hx-put="/api/library/edit-tags/${t.id}" hx-swap="none">
+          <div class="sheet-grab"></div>
+          <div class="sheet-head">
+            <div style="min-width:0;">
+              <div class="sheet-title">Edit tags</div>
+              <div class="sheet-sub">${esc(t.displayName)}</div>
+            </div>
+            <button type="submit" class="btn-primary" style="flex-shrink:0; font-size:13px; padding:11px 16px;">Save Metadata Changes</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            ${tagField("Track title", "title", t.title, required = true)}
+            ${tagField("Artist name", "artist", t.artist)}
+            ${tagField("Album title", "album", t.album)}
+            ${tagField("Genre", "genre", t.genre)}
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+              ${tagField("Release year", "year", t.year, numeric = true)}
+              ${tagField("Track number", "trackNo", if (t.trackNo > 0) t.trackNo.toString() else "", numeric = true)}
+            </div>
+            <div style="font-size:11px; color:var(--muted);">${
+                if (t.displayName.endsWith(".mp3", true)) "ID3v2 tags will be written into the MP3 file."
+                else "Non-MP3 file: tags are saved to the Poet library only."
+            }</div>
+          </div>
+        </form>"""
 
     // ---------------- now playing ----------------
 
@@ -472,7 +558,7 @@ object Views {
             <div class="folder-row">
               <span style="font-size:14px;">▣</span>
               <span class="folder-path">${esc(f.displayPath)}</span>
-              <button hx-post="/api/settings/remove-folder/${f.id}" hx-confirm="Remove this folder and its songs from the library?" hx-swap="none"
+              <button hx-get="/partial/confirm-folder/${f.id}" hx-target="#modal-root" hx-swap="innerHTML"
                       style="border:none; background:transparent; cursor:pointer; color:var(--muted); font-size:15px; padding:2px 6px; border-radius:6px;">✕</button>
             </div>"""
         }
@@ -513,7 +599,13 @@ object Views {
 
           <div class="card">
             <div class="card-title">Library scan</div>
-            <div id="scan-card" hx-get="/partial/scan" hx-trigger="every 2s" hx-swap="innerHTML">${scanCard(db)}</div>
+            <div id="scan-card">${scanCard(db)}</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Notification widget</div>
+            <div class="card-sub">Compact player shown in the notification drawer</div>
+            ${notificationWidget(db)}
           </div>
 
           <div class="card">
@@ -534,14 +626,60 @@ object Views {
         </div>"""
     }
 
+    /**
+     * Scan card body. Only polls /partial/scan while a scan is actually
+     * running: the polling wrapper is part of the swapped content, so the
+     * every-2s DOM churn stops as soon as the scan finishes instead of
+     * tearing the card down forever while the user reads Settings.
+     */
     fun scanCard(db: MusicDatabase): String {
         val scanning = LibraryScanner.isScanning
         val status = if (scanning) esc(LibraryScanner.progressText)
         else esc(db.getSetting("last_scan", "Not scanned yet"))
-        return """
+        val body = """
         <div class="card-sub">$status</div>
         <button class="btn-outline" hx-post="/api/library/scan" hx-target="#scan-card" hx-swap="innerHTML" ${if (scanning) "disabled" else ""}>
           ${if (scanning) """<span class="spinner"></span> Scanning library…""" else """<span style="font-size:15px;">⟳</span> Trigger library scan"""}
         </button>"""
+        return if (scanning)
+            """<div hx-get="/partial/scan" hx-trigger="every 2s" hx-target="#scan-card" hx-swap="innerHTML">$body</div>"""
+        else body
+    }
+
+    // ---------------- notification widget ----------------
+
+    private val ICON_W_PREV = """<svg width="12" height="10" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>"""
+    private val ICON_W_NEXT = """<svg width="12" height="10" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>"""
+
+    fun heartIcon(fav: Boolean): String = if (fav)
+        """<svg width="17" height="16" viewBox="0 0 24 22" style="animation:poet-pop 0.3s ease;"><path d="M12 21 C-6 10 3 -3 12 5 C21 -3 30 10 12 21 Z" fill="#e79ab0"></path></svg>"""
+    else
+        """<svg width="17" height="16" viewBox="0 0 24 22"><path d="M12 20 C-4.5 9.5 3.5 -1.5 12 5.5 C20.5 -1.5 28.5 9.5 12 20 Z" fill="none" stroke="#8a84a3" stroke-width="2"></path></svg>"""
+
+    /**
+     * Standalone compact player block: cover thumb, stacked metadata, live
+     * mm:ss position, prev/play/next cluster and the favorite heart toggle.
+     * Deliberately has no progress bar. The state poller keeps the w-* ids live.
+     */
+    fun notificationWidget(db: MusicDatabase): String {
+        val s = PlayerController.snapshot
+        val hasTrack = s.trackId >= 0
+        val fav = hasTrack && db.track(s.trackId)?.favorite == true
+        val art = if (hasTrack) """<img src="/api/art/${s.trackId}" alt="">""" else "♪"
+        return """
+        <div class="widget">
+          <div class="widget-art" id="w-art" data-track-id="${s.trackId}">$art</div>
+          <div class="widget-meta">
+            <div class="widget-title" id="w-title">${esc(s.title)}</div>
+            <div class="widget-artist" id="w-artist">${esc(s.artist)}</div>
+          </div>
+          <div class="widget-time" id="w-time">${fmtClock(s.positionMs)}</div>
+          <div class="widget-controls">
+            <button class="widget-btn" hx-post="/api/player/prev" hx-swap="none" aria-label="Previous">$ICON_W_PREV</button>
+            <button class="widget-play" id="w-play" hx-post="/api/player/toggle" hx-swap="none" aria-label="Play or pause"></button>
+            <button class="widget-btn" hx-post="/api/player/next" hx-swap="none" aria-label="Next">$ICON_W_NEXT</button>
+            <button class="widget-btn" id="w-fav" hx-post="/api/player/favourite" hx-swap="none" aria-label="Favorite">${heartIcon(fav)}</button>
+          </div>
+        </div>"""
     }
 }

@@ -19,8 +19,10 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondOutputStream
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.util.pipeline.PipelineContext
 import io.ktor.server.application.ApplicationCall
@@ -137,6 +139,34 @@ object PoetServer {
                     call.respondText(Views.sleepMenu(), ContentType.Text.Html)
                 }
 
+                get("/partial/sort-drawer") {
+                    call.respondText(Views.sortDrawer(db.getSetting("lib_sort", "title")), ContentType.Text.Html)
+                }
+
+                /** Empty fragment: swapped into overlay roots to close them. */
+                get("/partial/empty") {
+                    call.respondText("", ContentType.Text.Html)
+                }
+
+                get("/partial/confirm-folder/{id}") {
+                    val id = call.parameters["id"]?.toLongOrNull()
+                    val folder = db.folders().firstOrNull { it.id == id }
+                        ?: return@get call.respondText("", ContentType.Text.Html)
+                    call.respondText(Views.confirmRemoveFolder(folder.id, folder.displayPath), ContentType.Text.Html)
+                }
+
+                get("/partial/confirm-track/{id}") {
+                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
+                        ?: return@get call.respondText("", ContentType.Text.Html)
+                    call.respondText(Views.confirmRemoveTrack(t), ContentType.Text.Html)
+                }
+
+                get("/partial/confirm-playlist/{id}") {
+                    val pl = call.parameters["id"]?.toLongOrNull()?.let(db::playlist)
+                        ?: return@get call.respondText("", ContentType.Text.Html)
+                    call.respondText(Views.confirmDeletePlaylist(pl), ContentType.Text.Html)
+                }
+
                 // ---------- player API ----------
 
                 get("/api/player/state") {
@@ -235,6 +265,20 @@ object PoetServer {
                     call.respondText(Views.playlistSubmenu(db, t, queueCtx()), ContentType.Text.Html)
                 }
 
+                /**
+                 * Sort endpoint fired by the pastel sort drawer. Maps the
+                 * drawer's type slug to a library sort key, persists it, and
+                 * returns the re-sorted tracklist for the #song-list target.
+                 */
+                get("/api/library/sort") {
+                    val type = call.request.queryParameters["type"] ?: "title-az"
+                    val sort = Views.SORT_STATES.firstOrNull { it.first == type }?.second ?: "title"
+                    db.setSetting("lib_sort", sort)
+                    val q = call.request.queryParameters["q"] ?: ""
+                    val ctx = QueueCtx("songs", q, sort)
+                    call.respondText(Views.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                }
+
                 post("/api/library/scan") {
                     if (db.folders().isEmpty()) {
                         call.response.header("HX-Trigger", """{"poet-toast":"Add a music folder first"}""")
@@ -253,18 +297,19 @@ object PoetServer {
                     refresh(if (t.favorite) "Removed from favorites" else "Added to favorites")
                 }
 
-                get("/api/track/{id}/tags") {
+                get("/api/library/edit-tags/{id}") {
                     val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
                         ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.tagEditorModal(t), ContentType.Text.Html)
+                    call.respondText(Views.tagEditorSheet(t), ContentType.Text.Html)
                 }
 
-                post("/api/track/{id}/tags") {
-                    val id = call.parameters["id"]?.toLongOrNull() ?: return@post noContent()
+                put("/api/library/edit-tags/{id}") {
+                    val id = call.parameters["id"]?.toLongOrNull() ?: return@put noContent()
                     val p = call.receiveParameters()
                     val result = TagEditor.saveTags(
                         app, db, id,
-                        p["title"] ?: "", p["artist"] ?: "", p["album"] ?: ""
+                        p["title"] ?: "", p["artist"] ?: "", p["album"] ?: "",
+                        p["genre"] ?: "", p["year"] ?: "", p["trackNo"] ?: ""
                     )
                     call.response.header(
                         "HX-Trigger",
@@ -320,10 +365,16 @@ object PoetServer {
                     if (requester == null) toast("Folder picker unavailable") else { requester(); noContent() }
                 }
 
-                post("/api/settings/remove-folder/{id}") {
-                    val id = call.parameters["id"]?.toLongOrNull() ?: return@post noContent()
+                /** Fired by the OK button of the pastel folder-removal modal. */
+                delete("/api/settings/folder") {
+                    val id = call.request.queryParameters["id"]?.toLongOrNull()
+                        ?: return@delete call.respond(HttpStatusCode.NoContent)
                     db.removeFolder(id)
-                    refresh("Folder removed")
+                    call.response.header(
+                        "HX-Trigger",
+                        """{"poet-toast":"Folder removed","poet-refresh":true}"""
+                    )
+                    call.respond(HttpStatusCode.NoContent)
                 }
 
                 post("/api/settings/accent") {

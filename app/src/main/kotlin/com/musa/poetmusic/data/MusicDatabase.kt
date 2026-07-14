@@ -6,7 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 1) {
+class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -20,11 +20,14 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
                 album TEXT NOT NULL DEFAULT 'Unknown album',
                 duration_ms INTEGER NOT NULL DEFAULT 0,
                 track_no INTEGER NOT NULL DEFAULT 0,
+                genre TEXT NOT NULL DEFAULT '',
+                year TEXT NOT NULL DEFAULT '',
                 has_art INTEGER NOT NULL DEFAULT 0,
                 lrc_uri TEXT,
                 folder_id INTEGER NOT NULL DEFAULT 0,
                 favorite INTEGER NOT NULL DEFAULT 0,
-                date_added INTEGER NOT NULL DEFAULT 0
+                date_added INTEGER NOT NULL DEFAULT 0,
+                last_modified INTEGER NOT NULL DEFAULT 0
             )"""
         )
         db.execSQL(
@@ -57,7 +60,13 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE tracks ADD COLUMN genre TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE tracks ADD COLUMN year TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE tracks ADD COLUMN last_modified INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 
     // ---------- settings ----------
 
@@ -103,14 +112,17 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     @Synchronized
     fun upsertTrack(
         uri: String, parentUri: String, displayName: String, title: String, artist: String,
-        album: String, durationMs: Long, trackNo: Int, hasArt: Boolean, lrcUri: String?, folderId: Long
+        album: String, durationMs: Long, trackNo: Int, genre: String, year: String,
+        hasArt: Boolean, lrcUri: String?, folderId: Long, lastModified: Long
     ) {
         val db = writableDatabase
         val cv = ContentValues().apply {
             put("uri", uri); put("parent_uri", parentUri); put("display_name", displayName)
             put("title", title); put("artist", artist); put("album", album)
             put("duration_ms", durationMs); put("track_no", trackNo)
+            put("genre", genre); put("year", year)
             put("has_art", if (hasArt) 1 else 0); put("lrc_uri", lrcUri); put("folder_id", folderId)
+            put("last_modified", lastModified)
         }
         val updated = db.update("tracks", cv, "uri=?", arrayOf(uri))
         if (updated == 0) {
@@ -137,12 +149,13 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     private fun trackFrom(c: Cursor) = Track(
         id = c.getLong(0), uri = c.getString(1), parentUri = c.getString(2), displayName = c.getString(3),
         title = c.getString(4), artist = c.getString(5), album = c.getString(6), durationMs = c.getLong(7),
-        trackNo = c.getInt(8), hasArt = c.getInt(9) == 1, lrcUri = c.getString(10), folderId = c.getLong(11),
-        favorite = c.getInt(12) == 1, dateAdded = c.getLong(13)
+        trackNo = c.getInt(8), genre = c.getString(9), year = c.getString(10),
+        hasArt = c.getInt(11) == 1, lrcUri = c.getString(12), folderId = c.getLong(13),
+        favorite = c.getInt(14) == 1, dateAdded = c.getLong(15), lastModified = c.getLong(16)
     )
 
     private val trackCols =
-        "id, uri, parent_uri, display_name, title, artist, album, duration_ms, track_no, has_art, lrc_uri, folder_id, favorite, date_added"
+        "id, uri, parent_uri, display_name, title, artist, album, duration_ms, track_no, genre, year, has_art, lrc_uri, folder_id, favorite, date_added, last_modified"
 
     @Synchronized
     fun tracks(query: String = "", sort: String = "title"): List<Track> {
@@ -150,6 +163,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             "title_desc" -> "title COLLATE NOCASE DESC"
             "artist" -> "artist COLLATE NOCASE, title COLLATE NOCASE"
             "artist_desc" -> "artist COLLATE NOCASE DESC, title COLLATE NOCASE"
+            "date_modified" -> "last_modified DESC, date_added DESC, id DESC"
             "date_added" -> "date_added ASC, id ASC"
             "recent" -> "date_added DESC"
             "duration" -> "duration_ms DESC"
@@ -221,8 +235,12 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     }
 
     @Synchronized
-    fun updateTags(id: Long, title: String, artist: String, album: String) {
-        val cv = ContentValues().apply { put("title", title); put("artist", artist); put("album", album) }
+    fun updateTags(id: Long, title: String, artist: String, album: String, genre: String, year: String, trackNo: Int) {
+        val cv = ContentValues().apply {
+            put("title", title); put("artist", artist); put("album", album)
+            put("genre", genre); put("year", year); put("track_no", trackNo)
+            put("last_modified", System.currentTimeMillis())
+        }
         writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
     }
 
