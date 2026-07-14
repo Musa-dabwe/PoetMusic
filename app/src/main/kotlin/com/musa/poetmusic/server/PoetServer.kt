@@ -37,8 +37,24 @@ object PoetServer {
     @Volatile var addFolderRequester: (() -> Unit)? = null
 
     private var started = false
-    private val artCache = object : LinkedHashMap<Long, ByteArray>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, ByteArray>?) = size > 24
+
+    /** In-memory LRU for extracted album art, bounded by bytes rather than
+     *  entry count so a run of high-res covers can't balloon the heap. */
+    private const val ART_CACHE_MAX_BYTES = 12 * 1024 * 1024
+    private var artCacheBytes = 0L
+    private val artCache = LinkedHashMap<Long, ByteArray>(16, 0.75f, true)
+
+    private fun artCachePut(id: Long, art: ByteArray) = synchronized(artCache) {
+        // Oversized covers would evict everything else; serve them uncached.
+        if (art.size > ART_CACHE_MAX_BYTES / 4) return@synchronized
+        artCache.remove(id)?.let { artCacheBytes -= it.size }
+        artCache[id] = art
+        artCacheBytes += art.size
+        val eldest = artCache.entries.iterator()
+        while (artCacheBytes > ART_CACHE_MAX_BYTES && eldest.hasNext()) {
+            artCacheBytes -= eldest.next().value.size
+            eldest.remove()
+        }
     }
 
     @Synchronized
@@ -412,7 +428,7 @@ object PoetServer {
                         }
                     }
                     if (art != null) {
-                        synchronized(artCache) { artCache[id] = art }
+                        artCachePut(id, art)
                         call.response.header("Cache-Control", "max-age=3600")
                         call.respondBytes(art, ContentType.parse("image/jpeg"))
                     } else {
