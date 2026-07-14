@@ -10,11 +10,14 @@ data class Track(
     val album: String,
     val durationMs: Long,
     val trackNo: Int,
+    val genre: String,
+    val year: String,
     val hasArt: Boolean,
     val lrcUri: String?,
     val folderId: Long,
     val favorite: Boolean,
-    val dateAdded: Long
+    val dateAdded: Long,
+    val lastModified: Long
 )
 
 data class AlbumRow(val album: String, val artist: String, val trackCount: Int, val artTrackId: Long)

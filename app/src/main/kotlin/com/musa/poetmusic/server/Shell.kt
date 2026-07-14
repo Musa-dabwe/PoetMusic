@@ -46,6 +46,9 @@ button { font-family: inherit; color: var(--ink); }
 @keyframes poet-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes poet-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
 @keyframes poet-fade { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform: translateY(0);} }
+@keyframes poet-fade-in { from { opacity:0; } to { opacity:1; } }
+@keyframes poet-sheet-up { from { transform: translate(-50%,100%); } to { transform: translate(-50%,0); } }
+@keyframes poet-pop { 0% { transform: scale(0.7); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
 
 #app { width:100%; max-width:480px; min-height:100vh; margin:0 auto; position:relative; display:flex; flex-direction:column; }
 #main-container { flex:1; padding:6px 20px 130px 20px; }
@@ -135,8 +138,66 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .tint-pill.on { border-color: var(--ink); }
 .spinner { display:inline-block; width:15px; height:15px; border:2.5px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:poet-spin 0.8s linear infinite; }
 
-/* onboarding */
-#tip-shield { position:fixed; inset:0; z-index:40; background:rgba(59,54,81,0.35); backdrop-filter:blur(1px); }
+/* bottom sheets (sort drawer, tag editor) */
+.sheet-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); animation:poet-fade-in 0.2s ease; }
+.sheet { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; z-index:71;
+  background:#ffffff; border-radius:24px 24px 0 0; box-shadow:0 -12px 40px rgba(59,54,81,0.25); margin:0;
+  padding:12px 20px calc(24px + env(safe-area-inset-bottom)) 20px; animation:poet-sheet-up 0.25s cubic-bezier(0.2,0.9,0.3,1); }
+.sheet-tall { max-height:88vh; overflow-y:auto; }
+.sheet-grab { width:40px; height:4px; border-radius:2px; background:rgba(59,54,81,0.15); margin:0 auto 14px auto; }
+.sheet-title { font-size:16px; font-weight:700; }
+.sheet-sub { font-size:12px; color:var(--muted); font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sheet-head { position:sticky; top:0; z-index:2; background:#ffffff; display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:14px; }
+
+/* sort drawer */
+.sortbtn { border:none; cursor:pointer; display:inline-flex; align-items:center; gap:7px; padding:10px 14px; border-radius:12px;
+  background:rgba(59,54,81,0.06); color:var(--ink); font-size:13px; font-weight:700; flex-shrink:0; }
+.sortbtn:active { transform: scale(0.95); }
+.sortopt { display:flex; align-items:center; gap:14px; width:100%; border:none; cursor:pointer; text-align:left;
+  padding:13px 14px; border-radius:14px; background:rgba(59,54,81,0.03); color:var(--ink); transition:background 0.15s; }
+.sortopt:active { transform: scale(0.98); }
+.sortopt.active { background: var(--accent-faint); }
+.radio { width:20px; height:20px; border-radius:50%; border:2px solid var(--ink); box-sizing:border-box;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.radio-dot { width:10px; height:10px; border-radius:50%; background:var(--ink); animation:poet-pop 0.25s ease; }
+
+/* confirmation card */
+.confirm-card { width:100%; max-width:340px; background:#ffffff; border-radius:18px; padding:24px 22px 16px 22px;
+  box-shadow:0 20px 60px rgba(59,54,81,0.35); animation:poet-fade 0.15s ease-out; }
+.confirm-title { font-size:16px; font-weight:700; margin-bottom:8px; }
+.confirm-msg { font-size:14px; line-height:1.5; color:var(--muted); }
+.confirm-strong { color:var(--ink); font-weight:600; font-family:monospace; font-size:13px; word-break:break-all; }
+.confirm-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+.btn-ghost { border:none; background:transparent; cursor:pointer; padding:11px 18px; border-radius:12px;
+  font-size:13px; font-weight:700; letter-spacing:0.04em; color:var(--muted); }
+.btn-ghost:active { transform: scale(0.95); background:rgba(59,54,81,0.05); }
+.confirm-ok { letter-spacing:0.04em; font-size:13px; padding:11px 22px; }
+
+/* tag editor fields */
+.field { display:flex; flex-direction:column; gap:6px; }
+.field span { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; }
+.field input { font-family:inherit; font-size:14px; font-weight:600; color:var(--ink); padding:12px 14px; border-radius:12px;
+  border:1.5px solid rgba(59,54,81,0.12); background:#ffffff; outline:none; transition:border-color 0.15s, box-shadow 0.15s; }
+.field input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-faint); }
+
+/* notification widget block */
+.widget { background:var(--bg); border-radius:16px; padding:12px 14px; display:flex; align-items:center; gap:12px; }
+.widget-art { width:40px; height:40px; border-radius:10px; background:var(--accent-faint); flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:12px; color:rgba(59,54,81,0.55); overflow:hidden; }
+.widget-art img { width:100%; height:100%; object-fit:cover; }
+.widget-meta { flex:1; min-width:0; }
+.widget-title { font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.widget-artist { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.widget-time { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; flex-shrink:0; }
+.widget-controls { display:flex; align-items:center; gap:2px; flex-shrink:0; }
+.widget-btn { border:none; background:transparent; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
+.widget-btn:active { transform: scale(0.85); }
+.widget-play { border:none; cursor:pointer; width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; }
+.widget-play:active { transform: scale(0.85); }
+
+/* onboarding — no backdrop-filter here: blur on a full-screen fixed shield
+   glitches Android WebView compositing (elements behind it vanish) */
+#tip-shield { position:fixed; inset:0; z-index:40; background:rgba(59,54,81,0.35); }
 .tip-banner { position:absolute; left:24px; right:24px; top:100%; margin-top:14px; z-index:60; animation:poet-bob 2.2s ease-in-out infinite; }
 .tip-arrow { position:absolute; top:-7px; left:50%; width:14px; height:14px; background:var(--ink); transform:translateX(-50%) rotate(45deg); }
 .tip-body { background:var(--ink); color:#f5f3fa; border-radius:14px; padding:16px 18px; box-shadow:0 12px 32px rgba(59,54,81,0.35); }
@@ -191,7 +252,10 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
     </div>
   </div>
 
-  <div id="main-container" hx-get="/screens/library" hx-trigger="load" hx-target="this"></div>
+  <!-- Initial screen is loaded once from DOMContentLoaded (see JS below):
+       a load-triggered fetch here raced the onboarding redirect and could
+       swap the tip away right after it appeared. -->
+  <div id="main-container"></div>
 
   <div id="tray">
     <div id="tray-progress"></div>
@@ -216,6 +280,7 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
   </div>
 
   <div id="queue-root"></div>
+  <div id="sheet-root"></div>
   <div id="modal-root"></div>
   <div id="toast"></div>
 </div>
@@ -227,6 +292,12 @@ var ICON_PLAY_SM = '<svg width="14" height="16" viewBox="0 0 22 26" style="margi
 var ICON_PAUSE_SM = '<div style="display:flex; gap:4px;"><div style="width:4px; height:15px; background:#3b3651; border-radius:2px;"></div><div style="width:4px; height:15px; background:#3b3651; border-radius:2px;"></div></div>';
 var ICON_PLAY_LG = '<svg width="22" height="26" viewBox="0 0 22 26" style="margin-left:4px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>';
 var ICON_PAUSE_LG = '<div style="display:flex; gap:6px;"><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div></div>';
+
+/* notification widget block */
+var ICON_PLAY_W = '<svg width="11" height="13" viewBox="0 0 22 26" style="margin-left:2px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>';
+var ICON_PAUSE_W = '<div style="display:flex; gap:3px;"><div style="width:3px; height:12px; background:#3b3651; border-radius:2px;"></div><div style="width:3px; height:12px; background:#3b3651; border-radius:2px;"></div></div>';
+var ICON_HEART_ON = '<svg width="17" height="16" viewBox="0 0 24 22" style="animation:poet-pop 0.3s ease;"><path d="M12 21 C-6 10 3 -3 12 5 C21 -3 30 10 12 21 Z" fill="#e79ab0"></path></svg>';
+var ICON_HEART_OFF = '<svg width="17" height="16" viewBox="0 0 24 22"><path d="M12 20 C-4.5 9.5 3.5 -1.5 12 5.5 C20.5 -1.5 28.5 9.5 12 20 Z" fill="none" stroke="#8a84a3" stroke-width="2"></path></svg>';
 
 /* shuffle button: crossed arrows = shuffle all, ordered list = play in order */
 var ICON_SHUFFLE_ON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>';
@@ -251,6 +322,12 @@ function fmt(ms) {
   return m + ':' + (s < 10 ? '0' + s : s);
 }
 
+/* mm:ss with zero-padded minutes, for the notification widget */
+function fmtClock(ms) {
+  var s = Math.floor(ms / 1000), m = Math.floor(s / 60); s = s % 60;
+  return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+}
+
 function poetGo(url) { htmx.ajax('GET', url, { target: '#main-container', swap: 'innerHTML' }); }
 
 function poetToast(msg) {
@@ -271,6 +348,9 @@ function openQueue() {
 }
 function closeQueue() {
   document.getElementById('queue-root').innerHTML = '';
+}
+function closeSheet() {
+  document.getElementById('sheet-root').innerHTML = '';
 }
 
 /* keep an opened context menu fully on screen: flip upward near the bottom edge */
@@ -312,7 +392,11 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
     var lib = document.getElementById('nav-library'), set = document.getElementById('nav-settings');
     lib.classList.toggle('active', poetScreenUrl.indexOf('/screens/settings') !== 0);
     set.classList.toggle('active', poetScreenUrl.indexOf('/screens/settings') === 0);
-    poetShownTrack = -1; // force refresh of now-playing fields
+    /* Sync the shown-track marker with what was actually rendered. Resetting
+       it to -1 here made every poll re-fetch the whole Now Playing screen
+       once a second — a permanent full-screen flicker. */
+    var npRoot = document.getElementById('np-root');
+    poetShownTrack = npRoot ? Number(npRoot.getAttribute('data-track-id')) : -1;
     window.scrollTo(0, 0);
   }
 });
@@ -361,6 +445,23 @@ function applyState(s) {
   document.querySelectorAll('.row[data-track-id]').forEach(function (r) {
     r.classList.toggle('playing', Number(r.getAttribute('data-track-id')) === s.trackId);
   });
+
+  /* notification widget block (Settings): live position + controls */
+  var wTime = document.getElementById('w-time');
+  if (wTime) {
+    wTime.textContent = fmtClock(s.pos);
+    var wPlay = document.getElementById('w-play');
+    if (wPlay) wPlay.innerHTML = s.playing ? ICON_PAUSE_W : ICON_PLAY_W;
+    var wFav = document.getElementById('w-fav');
+    if (wFav && wFav._fav !== !!s.fav) { wFav._fav = !!s.fav; wFav.innerHTML = s.fav ? ICON_HEART_ON : ICON_HEART_OFF; }
+    var wArt = document.getElementById('w-art');
+    if (wArt && Number(wArt.getAttribute('data-track-id')) !== s.trackId) {
+      wArt.setAttribute('data-track-id', s.trackId);
+      wArt.innerHTML = s.trackId >= 0 ? '<img src="/api/art/' + s.trackId + '" alt="">' : '♪';
+      document.getElementById('w-title').textContent = s.title;
+      document.getElementById('w-artist').textContent = s.artist;
+    }
+  }
 
   var np = document.getElementById('np-root');
   if (np) {
@@ -456,15 +557,19 @@ function dismissTip() {
   var c = document.getElementById('folder-card'); if (c) c.style.zIndex = '1';
 }
 document.addEventListener('DOMContentLoaded', function () {
-  if (window.POET.folders === 0 && localStorage.getItem('poet-tip-dismissed') !== '1') {
-    setTimeout(function () { poetGo('/screens/settings?tip=1'); }, 250);
-  }
+  /* Single deterministic first load. Previously the main container issued a
+     load-triggered library fetch AND this handler issued a delayed settings
+     redirect; whichever response landed last won, so the onboarding tip
+     could appear and then be swapped away with no user interaction. */
+  var firstRun = window.POET.folders === 0 && localStorage.getItem('poet-tip-dismissed') !== '1';
+  poetGo(firstRun ? '/screens/settings?tip=1' : '/screens/library');
   poetPoll();
 });
 
 /* back-button support: Android calls poetBack() */
 function poetBack() {
   if (document.getElementById('modal-root').innerHTML !== '') { document.getElementById('modal-root').innerHTML = ''; return 'handled'; }
+  if (document.getElementById('sheet-root').innerHTML !== '') { closeSheet(); return 'handled'; }
   if (document.getElementById('queue-root').innerHTML !== '') { closeQueue(); return 'handled'; }
   if (document.querySelector('.menu')) { closeMenus(); return 'handled'; }
   if (poetScreenUrl !== '/screens/library') { poetGo('/screens/library'); return 'handled'; }

@@ -58,7 +58,7 @@ object LibraryScanner {
         context: Context, db: MusicDatabase, treeUri: Uri, dirDocId: String,
         folderId: Long, seen: MutableSet<String>
     ): Int {
-        data class Entry(val docId: String, val name: String, val mime: String)
+        data class Entry(val docId: String, val name: String, val mime: String, val lastModified: Long)
 
         val children = mutableListOf<Entry>()
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, dirDocId)
@@ -67,12 +67,13 @@ object LibraryScanner {
             arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED
             ),
             null, null, null
         )?.use { c ->
             while (c.moveToNext()) {
-                children += Entry(c.getString(0), c.getString(1) ?: "", c.getString(2) ?: "")
+                children += Entry(c.getString(0), c.getString(1) ?: "", c.getString(2) ?: "", if (c.isNull(3)) 0L else c.getLong(3))
             }
         }
 
@@ -103,6 +104,8 @@ object LibraryScanner {
             var album = "Unknown album"
             var durationMs = 0L
             var trackNo = 0
+            var genre = ""
+            var year = ""
             var hasArt = false
             val mmr = MediaMetadataRetriever()
             try {
@@ -113,6 +116,12 @@ object LibraryScanner {
                 mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.let { durationMs = it }
                 mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
                     ?.substringBefore('/')?.trim()?.toIntOrNull()?.let { trackNo = it }
+                mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)?.takeIf { it.isNotBlank() }?.let { genre = it }
+                mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)?.takeIf { it.isNotBlank() }?.let { year = it }
+                if (year.isBlank()) {
+                    mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
+                        ?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) }?.let { year = it }
+                }
                 hasArt = mmr.embeddedPicture != null
             } catch (_: Exception) {
                 // Unreadable file; index it by name only.
@@ -123,7 +132,8 @@ object LibraryScanner {
             db.upsertTrack(
                 uri = docUri.toString(), parentUri = parentUri, displayName = child.name,
                 title = title, artist = artist, album = album, durationMs = durationMs,
-                trackNo = trackNo, hasArt = hasArt, lrcUri = lrcByBase[base.lowercase()], folderId = folderId
+                trackNo = trackNo, genre = genre, year = year, hasArt = hasArt,
+                lrcUri = lrcByBase[base.lowercase()], folderId = folderId, lastModified = child.lastModified
             )
             seen += docUri.toString()
             found++
