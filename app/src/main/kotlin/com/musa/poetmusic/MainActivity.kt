@@ -11,6 +11,7 @@ import android.provider.DocumentsContract
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
@@ -79,6 +80,27 @@ class MainActivity : AppCompatActivity() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 // Keep navigation inside the embedded server.
                 return request.url.host != "127.0.0.1"
+            }
+
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                // Serve static assets straight from the APK: no Ktor round trip
+                // and, because intercepted responses bypass Chromium's network
+                // stack, nothing lands in the WebView HTTP disk cache.
+                val url = request.url
+                if (url.host != "127.0.0.1" || url.path?.startsWith("/assets/") != true) return null
+                val name = url.lastPathSegment ?: return null
+                if (!name.matches(Regex("[A-Za-z0-9._-]+"))) return null
+                val mime = when {
+                    name.endsWith(".js") -> "application/javascript"
+                    name.endsWith(".woff2") -> "font/woff2"
+                    name.endsWith(".css") -> "text/css"
+                    else -> "application/octet-stream"
+                }
+                return try {
+                    WebResourceResponse(mime, null, assets.open("web/$name"))
+                } catch (e: Exception) {
+                    null // Fall through to the Ktor /assets route.
+                }
             }
         }
         setContentView(web)
@@ -161,6 +183,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         PoetServer.addFolderRequester = null
+        // Drop the WebView disk cache (album art HTTP responses); 'false'
+        // keeps cookies and DOM storage intact.
+        if (::web.isInitialized) web.clearCache(false)
         super.onDestroy()
     }
 }
