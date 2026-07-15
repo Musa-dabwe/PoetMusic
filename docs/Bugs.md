@@ -155,7 +155,7 @@ real app):
 | Track data | title/artist/duration only | tracks carry `album`, `genre`, `year`, `trackNo`, `modified` — needed by the tag editor and Date-modified sort |
 | Folder removal | immediate delete on ✕ | ✕ opens a **rounded 18 px confirmation card** ("Are you sure you want to remove *folder* from the library?") with borderless CANCEL / filled OK |
 | Context menu | Play next, Add to playlist | adds **Edit tags** entry |
-| Tag editing | none | **slide-in bottom sheet** with six focus-ring fields (title, artist, album, genre, year, track number) and a persistent "Save Metadata Changes" header button |
+| Tag editing | none | **full-height three-tab sheet** (Details / Artwork / Lyrics). Details: title, artist, album, album artist, genre, year, track/disc number, composer, comment, plus a "rename file from tags" toggle with live preview. Artwork: gallery cover grabber (embed / remove / restore). Lyrics: unsynced USLT text and a synced-LRC maker (stamp `[mm:ss.xx]` against live playback, export a sidecar `.lrc`). ID3v2 written in place for MP3s; other formats save to the library only |
 | Notification widget | none | **compact widget preview** in Settings: 10 px-rounded cover thumb, bold 14 px title / muted 12 px artist, live mm:ss timestamp, prev/play/next cluster, outline↔filled favorite heart (no progress bar) |
 | Animations | spin, bob | adds `poet-sheet-up`, `poet-fade-in`, `poet-pop` (heart/radio pop) |
 | Queue stepping | index arithmetic on a fixed array | steps through the *sorted* list, so next/prev follow the visible order |

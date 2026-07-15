@@ -14,7 +14,7 @@ import android.database.sqlite.SQLiteOpenHelper
  * pages are returned to the OS via incremental auto-vacuum, keeping the
  * on-disk footprint tight.
  */
-class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 2) {
+class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 3) {
 
     init {
         setWriteAheadLoggingEnabled(true)
@@ -54,6 +54,10 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
                 track_no INTEGER NOT NULL DEFAULT 0,
                 genre TEXT NOT NULL DEFAULT '',
                 year TEXT NOT NULL DEFAULT '',
+                album_artist TEXT NOT NULL DEFAULT '',
+                disc_no INTEGER NOT NULL DEFAULT 0,
+                composer TEXT NOT NULL DEFAULT '',
+                comment TEXT NOT NULL DEFAULT '',
                 has_art INTEGER NOT NULL DEFAULT 0,
                 lrc_uri TEXT,
                 folder_id INTEGER NOT NULL DEFAULT 0,
@@ -97,6 +101,12 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             db.execSQL("ALTER TABLE tracks ADD COLUMN genre TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE tracks ADD COLUMN year TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE tracks ADD COLUMN last_modified INTEGER NOT NULL DEFAULT 0")
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE tracks ADD COLUMN album_artist TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE tracks ADD COLUMN disc_no INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE tracks ADD COLUMN composer TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE tracks ADD COLUMN comment TEXT NOT NULL DEFAULT ''")
         }
     }
 
@@ -154,14 +164,18 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     fun upsertTrack(
         uri: String, parentUri: String, displayName: String, title: String, artist: String,
         album: String, durationMs: Long, trackNo: Int, genre: String, year: String,
+        albumArtist: String, discNo: Int, composer: String,
         hasArt: Boolean, lrcUri: String?, folderId: Long, lastModified: Long
     ) {
         val db = writableDatabase
+        // "comment" is deliberately absent: MediaMetadataRetriever can't read
+        // COMM frames, so rescans must not wipe a comment saved by the editor.
         val cv = ContentValues().apply {
             put("uri", uri); put("parent_uri", parentUri); put("display_name", displayName)
             put("title", title); put("artist", artist); put("album", album)
             put("duration_ms", durationMs); put("track_no", trackNo)
             put("genre", genre); put("year", year)
+            put("album_artist", albumArtist); put("disc_no", discNo); put("composer", composer)
             put("has_art", if (hasArt) 1 else 0); put("lrc_uri", lrcUri); put("folder_id", folderId)
             put("last_modified", lastModified)
         }
@@ -195,11 +209,12 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         title = c.getString(4), artist = c.getString(5), album = c.getString(6), durationMs = c.getLong(7),
         trackNo = c.getInt(8), genre = c.getString(9), year = c.getString(10),
         hasArt = c.getInt(11) == 1, lrcUri = c.getString(12), folderId = c.getLong(13),
-        favorite = c.getInt(14) == 1, dateAdded = c.getLong(15), lastModified = c.getLong(16)
+        favorite = c.getInt(14) == 1, dateAdded = c.getLong(15), lastModified = c.getLong(16),
+        albumArtist = c.getString(17), discNo = c.getInt(18), composer = c.getString(19), comment = c.getString(20)
     )
 
     private val trackCols =
-        "id, uri, parent_uri, display_name, title, artist, album, duration_ms, track_no, genre, year, has_art, lrc_uri, folder_id, favorite, date_added, last_modified"
+        "id, uri, parent_uri, display_name, title, artist, album, duration_ms, track_no, genre, year, has_art, lrc_uri, folder_id, favorite, date_added, last_modified, album_artist, disc_no, composer, comment"
 
     fun tracks(query: String = "", sort: String = "title"): List<Track> {
         val order = when (sort) {
@@ -271,13 +286,33 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         writableDatabase.execSQL("UPDATE tracks SET favorite=? WHERE id=?", arrayOf(if (fav) 1 else 0, id))
     }
 
-    fun updateTags(id: Long, title: String, artist: String, album: String, genre: String, year: String, trackNo: Int) {
+    fun updateTags(
+        id: Long, title: String, artist: String, album: String, genre: String, year: String,
+        trackNo: Int, albumArtist: String, discNo: Int, composer: String, comment: String
+    ) {
         val cv = ContentValues().apply {
             put("title", title); put("artist", artist); put("album", album)
             put("genre", genre); put("year", year); put("track_no", trackNo)
+            put("album_artist", albumArtist); put("disc_no", discNo)
+            put("composer", composer); put("comment", comment)
             put("last_modified", System.currentTimeMillis())
         }
         writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
+    }
+
+    /** Points a track row at its new document after a physical file rename. */
+    fun updateTrackFile(id: Long, uri: String, displayName: String) {
+        val cv = ContentValues().apply { put("uri", uri); put("display_name", displayName) }
+        writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
+    }
+
+    fun updateLrcUri(id: Long, lrcUri: String?) {
+        val cv = ContentValues().apply { put("lrc_uri", lrcUri) }
+        writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
+    }
+
+    fun setHasArt(id: Long, hasArt: Boolean) {
+        writableDatabase.execSQL("UPDATE tracks SET has_art=? WHERE id=?", arrayOf(if (hasArt) 1 else 0, id))
     }
 
     fun removeTrack(id: Long) {
