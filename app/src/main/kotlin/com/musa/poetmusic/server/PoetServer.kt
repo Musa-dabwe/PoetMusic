@@ -148,7 +148,12 @@ object PoetServer {
                 }
 
                 get("/partial/queue") {
-                    call.respondText(Views.queueDrawer(PlayerController.queueItems()), ContentType.Text.Html)
+                    val items = PlayerController.queueItems()
+                    call.respondText(Views.queuePanel(db, items, PlayerController.snapshot.playing), ContentType.Text.Html)
+                }
+
+                get("/partial/queue-body") {
+                    call.respondText(queueBody(db), ContentType.Text.Html)
                 }
 
                 get("/partial/scan") {
@@ -203,8 +208,8 @@ object PoetServer {
                     val ctx = queueCtx()
                     val tracks = ctx.resolve(db)
                     val index = tracks.indexOfFirst { it.id == id }
-                    if (index >= 0) PlayerController.setQueue(tracks, index, shuffled = false)
-                    else db.track(id)?.let { PlayerController.setQueue(listOf(it), 0, shuffled = false) }
+                    if (index >= 0) PlayerController.setQueue(tracks, index, shuffled = false, source = sourceLabel(db, ctx))
+                    else db.track(id)?.let { PlayerController.setQueue(listOf(it), 0, shuffled = false, source = sourceLabel(db, ctx)) }
                     noContent()
                 }
 
@@ -213,8 +218,7 @@ object PoetServer {
                     val shuffle = call.request.queryParameters["shuffle"] == "1"
                     val tracks = ctx.resolve(db)
                     if (tracks.isEmpty()) return@post toast("Nothing to play yet")
-                    val start = if (shuffle) tracks.indices.random() else 0
-                    PlayerController.setQueue(tracks, start, shuffled = shuffle)
+                    PlayerController.setQueue(tracks, 0, shuffled = shuffle, source = sourceLabel(db, ctx))
                     noContent()
                 }
 
@@ -230,6 +234,33 @@ object PoetServer {
                     toast("Added to queue: ${t.title}")
                 }
 
+                /** Queue panel actions: each mutates the queue, then returns the
+                 *  re-rendered #qp-body fragment (queueItems() runs after the
+                 *  mutation on the FIFO main-thread handler, so it sees the result). */
+
+                post("/api/queue/jump/{index}") {
+                    call.parameters["index"]?.toIntOrNull()?.let(PlayerController::jumpTo)
+                    call.respondText(queueBody(db), ContentType.Text.Html)
+                }
+
+                post("/api/queue/remove/{index}") {
+                    call.parameters["index"]?.toIntOrNull()?.let(PlayerController::removeQueueItem)
+                    call.respondText(queueBody(db), ContentType.Text.Html)
+                }
+
+                post("/api/queue/move") {
+                    val p = call.receiveParameters()
+                    val from = p["from"]?.toIntOrNull()
+                    val to = p["to"]?.toIntOrNull()
+                    if (from != null && to != null) PlayerController.moveQueueItem(from, to)
+                    call.respondText(queueBody(db), ContentType.Text.Html)
+                }
+
+                post("/api/queue/clear") {
+                    PlayerController.clearUpcoming()
+                    call.respondText(queueBody(db), ContentType.Text.Html)
+                }
+
                 post("/api/player/favourite") {
                     val s = PlayerController.snapshot
                     val t = if (s.trackId >= 0) db.track(s.trackId) else null
@@ -238,12 +269,6 @@ object PoetServer {
                     // The full-size widget shows the heart; keep it honest.
                     WidgetRenderer.pushUpdate(app)
                     toast(if (t.favorite) "Removed from Favourites" else "Added to Favourites ♥")
-                }
-
-                post("/api/player/jump/{index}") {
-                    val index = call.parameters["index"]?.toIntOrNull() ?: return@post noContent()
-                    PlayerController.jumpTo(index)
-                    noContent()
                 }
 
                 post("/api/player/toggle") { PlayerController.togglePlay(); noContent() }
@@ -489,6 +514,19 @@ object PoetServer {
     }
 
     // ---------- route helpers ----------
+
+    /** Re-rendered inner content of the queue panel (#qp-body). */
+    private fun queueBody(db: MusicDatabase): String =
+        Views.queuePanelBody(db, PlayerController.queueItems(), PlayerController.snapshot.playing)
+
+    /** Human label for the listing a queue was built from ("Playing from …"). */
+    private fun sourceLabel(db: MusicDatabase, ctx: QueueCtx): String = when (ctx.ctx) {
+        "album" -> ctx.album.ifBlank { "Album" }
+        "artist" -> ctx.artist.ifBlank { "Artist" }
+        "playlist" -> db.playlist(ctx.pid)?.name ?: "Playlist"
+        "favorites" -> "Favorites"
+        else -> if (ctx.q.isNotBlank()) "search “${ctx.q}”" else "All songs"
+    }
 
     private fun PipelineContext<Unit, ApplicationCall>.queueCtx(): QueueCtx {
         val p = call.request.queryParameters
