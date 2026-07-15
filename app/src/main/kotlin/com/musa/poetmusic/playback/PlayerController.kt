@@ -251,6 +251,24 @@ object PlayerController {
         return out
     }
 
+    /**
+     * Repoint any queued media item for [trackId] at its renamed document so
+     * playback keeps working after the tag editor renames the physical file.
+     * ExoPlayer media items are immutable, so each match is rebuilt in place;
+     * the currently playing item is left untouched to avoid interrupting it.
+     */
+    fun onTrackFileRenamed(trackId: Long, newUri: String) = onMain { p ->
+        val id = trackId.toString()
+        val cur = p.currentMediaItemIndex
+        for (i in 0 until p.mediaItemCount) {
+            if (i == cur) continue
+            val item = p.getMediaItemAt(i)
+            if (item.mediaId != id) continue
+            val rebuilt = item.buildUpon().setUri(Uri.parse(newUri)).build()
+            p.replaceMediaItem(i, rebuilt)
+        }
+    }
+
     /** Jump to a specific media item index in the queue and play it. */
     fun jumpTo(index: Int) = onMain { p ->
         if (index in 0 until p.mediaItemCount) {

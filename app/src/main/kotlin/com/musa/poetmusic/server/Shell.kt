@@ -182,6 +182,89 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
   border:1.5px solid rgba(59,54,81,0.12); background:#ffffff; outline:none; transition:border-color 0.15s, box-shadow 0.15s; }
 .field input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-faint); }
 
+/* full-height tag editor sheet */
+.editor-sheet { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; height:92vh;
+  z-index:71; background:#ffffff; border-radius:24px 24px 0 0; box-shadow:0 -12px 40px rgba(59,54,81,0.3);
+  display:flex; flex-direction:column; animation:poet-sheet-up 0.28s cubic-bezier(0.2,0.9,0.3,1); }
+.ed-head { display:flex; align-items:center; gap:13px; padding:0 20px 14px 20px; flex-shrink:0; }
+.ed-head-art { width:46px; height:46px; border-radius:11px; background:var(--accent-faint); flex-shrink:0; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:rgba(59,54,81,0.55); }
+.ed-head-art img { width:100%; height:100%; object-fit:cover; }
+.ed-head-title { font-size:16px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ed-head-file { font-size:12px; color:var(--muted); font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ed-close { border:none; background:rgba(59,54,81,0.06); cursor:pointer; width:34px; height:34px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center; color:var(--muted); flex-shrink:0; }
+.ed-close:active { transform:scale(0.9); }
+.ed-tabs { display:flex; gap:6px; padding:0 20px 14px 20px; flex-shrink:0; }
+.ed-tab { flex:1; border:none; cursor:pointer; font-size:13px; font-weight:700; padding:10px 0; border-radius:12px;
+  background:rgba(59,54,81,0.06); color:var(--muted); transition:background 0.15s; }
+.ed-tab:active { transform:scale(0.97); }
+.ed-tab.active { background:var(--accent); color:var(--ink); }
+.ed-body { flex:1; overflow-y:auto; padding:4px 20px 20px 20px; min-height:0; }
+.ed-field { display:flex; flex-direction:column; gap:6px; }
+.ed-field span { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; }
+.ed-field input, .ed-field textarea { font-family:inherit; font-size:14px; font-weight:600; color:var(--ink); padding:12px 14px;
+  border-radius:12px; border:1.5px solid rgba(59,54,81,0.12); background:#ffffff; outline:none; resize:none;
+  transition:border-color 0.15s, box-shadow 0.15s; width:100%; box-sizing:border-box; }
+.ed-field textarea { font-weight:500; }
+.ed-field input:focus, .ed-field textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-faint); }
+
+/* rename card + switch */
+.ed-rename-card { background:var(--bg); border-radius:14px; padding:14px; }
+.ed-switch { border:none; cursor:pointer; width:46px; height:27px; border-radius:99px; background:rgba(59,54,81,0.18);
+  position:relative; flex-shrink:0; transition:background 0.2s; }
+.ed-switch.on { background:var(--accent); }
+.ed-knob { position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:#ffffff;
+  box-shadow:0 1px 3px rgba(59,54,81,0.3); transition:left 0.2s; }
+.ed-switch.on .ed-knob { left:22px; }
+.ed-mono-input { width:100%; box-sizing:border-box; font-family:monospace; font-size:13px; font-weight:600; color:var(--ink);
+  padding:10px 12px; border-radius:10px; border:1.5px solid rgba(59,54,81,0.12); background:#ffffff; outline:none; }
+.ed-mono-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-faint); }
+.ed-rename-preview { font-size:12px; font-family:monospace; font-weight:700; color:#6f6890; margin-top:2px; word-break:break-all; }
+
+/* artwork tab */
+.ed-art-tile { width:100%; aspect-ratio:1; max-width:300px; border-radius:20px; overflow:hidden; box-shadow:0 8px 24px var(--accent-shadow);
+  display:flex; align-items:center; justify-content:center; background:rgba(59,54,81,0.05); }
+.ed-art-tile img { width:100%; height:100%; object-fit:cover; }
+.ed-art-empty { text-align:center; color:var(--muted); }
+.ed-art-empty .g { font-size:34px; opacity:0.5; }
+.ed-art-btn { flex:1; border:1.5px solid rgba(59,54,81,0.14); cursor:pointer; font-family:inherit; padding:12px; border-radius:13px;
+  background:#ffffff; color:var(--ink); font-size:13px; font-weight:700; }
+.ed-art-btn:active { transform:scale(0.97); }
+
+/* lyrics tab */
+.ed-seg { display:flex; gap:6px; padding:4px; background:var(--bg); border-radius:12px; }
+.ed-seg-btn { flex:1; border:none; cursor:pointer; font-family:inherit; font-size:13px; font-weight:700; padding:9px 0; border-radius:9px;
+  background:transparent; color:var(--muted); }
+.ed-seg-btn.active { background:#ffffff; color:var(--ink); box-shadow:0 1px 4px rgba(59,54,81,0.12); }
+.ed-lrc-transport { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:14px; background:var(--accent-faint); margin-bottom:12px; }
+.ed-lrc-play { border:none; cursor:pointer; width:44px; height:44px; border-radius:50%; background:var(--accent); flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px var(--accent-shadow); }
+.ed-lrc-play:active { transform:scale(0.9); }
+.ed-lrc-clock { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:0.02em; }
+.ed-lrc-count { font-size:11px; color:var(--muted); }
+.ed-lrc-reset { border:none; background:transparent; cursor:pointer; font-family:inherit; font-size:12px; font-weight:700;
+  color:var(--muted); padding:6px 8px; border-radius:8px; flex-shrink:0; }
+.ed-lrc-reset:active { transform:scale(0.95); background:rgba(59,54,81,0.06); }
+.ed-lrc-stamp { border:none; cursor:pointer; font-family:inherit; width:100%; padding:14px; border-radius:14px; background:var(--ink);
+  color:#f5f3fa; font-size:14px; font-weight:700; box-shadow:0 4px 14px rgba(59,54,81,0.28); margin-bottom:12px; }
+.ed-lrc-stamp:active { transform:scale(0.98); }
+.ed-lrc-rows { display:flex; flex-direction:column; gap:3px; margin-bottom:12px; }
+.ed-lrc-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:12px; cursor:pointer; background:transparent; transition:background 0.15s; }
+.ed-lrc-row.next { background:rgba(59,54,81,0.04); }
+.ed-lrc-row.active { background:var(--accent-faint); }
+.ed-lrc-row .stamp { font-size:12px; font-family:monospace; font-weight:700; color:#c8c3d8; flex-shrink:0; width:78px; }
+.ed-lrc-row.stamped .stamp { color:#6f6890; }
+.ed-lrc-row .txt { font-size:14px; font-weight:500; color:var(--muted); flex:1; }
+.ed-lrc-row.stamped .txt { color:var(--ink); }
+.ed-lrc-row.active .txt { font-weight:700; }
+.ed-lrc-badge { font-size:10px; font-weight:700; color:var(--ink); background:var(--accent); padding:3px 7px; border-radius:99px; flex-shrink:0; }
+.ed-lrc-empty { font-size:13px; color:var(--muted); text-align:center; padding:20px; }
+.ed-lrc-export { border:1.5px solid var(--accent); cursor:pointer; font-family:inherit; width:100%; padding:12px; border-radius:13px;
+  background:#ffffff; color:var(--ink); font-size:13px; font-weight:700; }
+.ed-lrc-export:active { transform:scale(0.98); }
+.ed-savebar { flex-shrink:0; padding:12px 20px calc(16px + env(safe-area-inset-bottom)) 20px; border-top:1px solid rgba(59,54,81,0.08); background:#ffffff; }
+
 /* home screen widget preview block (Settings) */
 .widget { background:var(--bg); border-radius:16px; padding:12px 14px; display:flex; align-items:center; gap:12px; }
 .widget-art { width:40px; height:40px; border-radius:10px; background:var(--accent-faint); flex-shrink:0;
@@ -346,6 +429,7 @@ var poetScreenUrl = '/screens/library';
 var poetSeeking = false;
 var poetShownTrack = -1;
 var poetTrayTrack = -2;
+var poetTrayMod = -1;
 var poetLastState = null;
 var poetQueueDrag = false;
 
@@ -407,8 +491,19 @@ document.addEventListener('click', function (e) {
 
 document.body.addEventListener('poet-toast', function (e) { poetToast(e.detail.value || e.detail); });
 document.body.addEventListener('poet-refresh', function () { closeMenus(); poetGo(poetScreenUrl); });
-document.body.addEventListener('poet-close-modal', function () { document.getElementById('modal-root').innerHTML = ''; });
+document.body.addEventListener('poet-close-modal', function () {
+  if (window.poetEd && poetEd.tick) clearInterval(poetEd.tick);
+  window.poetEd = null;
+  document.getElementById('modal-root').innerHTML = '';
+});
 document.body.addEventListener('poet-goto', function (e) { closeMenus(); poetGo(e.detail.value || e.detail); });
+document.body.addEventListener('poet-art-changed', function (e) {
+  /* Bust any cached cover for this track so freshly written art shows at once. */
+  var id = e.detail.value || e.detail;
+  document.querySelectorAll('img[src*="/api/art/' + id + '"]').forEach(function (img) {
+    img.src = '/api/art/' + id + '?v=' + Date.now();
+  });
+});
 
 document.body.addEventListener('htmx:afterSwap', function (e) {
   var t = e.detail.target;
@@ -499,15 +594,17 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
 /* ---- live playback state poller ---- */
 function applyState(s) {
   poetLastState = s;
+  /* wall-clock stamp for sub-second position estimation (LRC maker) */
+  s._at = Date.now();
   var pct = s.dur > 0 ? (s.pos / s.dur * 100) : 0;
   document.getElementById('tray-progress').style.width = pct + '%';
   document.getElementById('tray-play').innerHTML = s.playing ? ICON_PAUSE_SM : ICON_PLAY_SM;
-  if (s.trackId !== poetTrayTrack) {
-    poetTrayTrack = s.trackId;
+  if (s.trackId !== poetTrayTrack || s.mod !== poetTrayMod) {
+    poetTrayTrack = s.trackId; poetTrayMod = s.mod;
     document.getElementById('tray-title').textContent = s.title;
     document.getElementById('tray-artist').textContent = s.artist;
     var art = document.getElementById('tray-art');
-    art.innerHTML = s.trackId >= 0 ? '<img src="/api/art/' + s.trackId + '" alt="">' : '♪';
+    art.innerHTML = s.trackId >= 0 ? '<img src="/api/art/' + s.trackId + '?v=' + s.mod + '" alt="">' : '♪';
   }
   document.querySelectorAll('.row[data-track-id]').forEach(function (r) {
     r.classList.toggle('playing', Number(r.getAttribute('data-track-id')) === s.trackId);
@@ -522,9 +619,9 @@ function applyState(s) {
     var wFav = document.getElementById('w-fav');
     if (wFav && wFav._fav !== !!s.fav) { wFav._fav = !!s.fav; wFav.innerHTML = s.fav ? ICON_HEART_ON : ICON_HEART_OFF; }
     var wArt = document.getElementById('w-art');
-    if (wArt && Number(wArt.getAttribute('data-track-id')) !== s.trackId) {
-      wArt.setAttribute('data-track-id', s.trackId);
-      wArt.innerHTML = s.trackId >= 0 ? '<img src="/api/art/' + s.trackId + '" alt="">' : '♪';
+    if (wArt && (Number(wArt.getAttribute('data-track-id')) !== s.trackId || wArt._mod !== s.mod)) {
+      wArt.setAttribute('data-track-id', s.trackId); wArt._mod = s.mod;
+      wArt.innerHTML = s.trackId >= 0 ? '<img src="/api/art/' + s.trackId + '?v=' + s.mod + '" alt="">' : '♪';
       document.getElementById('w-title').textContent = s.title;
       document.getElementById('w-artist').textContent = s.artist;
     }
@@ -648,9 +745,185 @@ document.addEventListener('DOMContentLoaded', function () {
   poetPoll();
 });
 
+/* ---- tag editor ---- */
+function poetInitEditor() {
+  var f = document.getElementById('ed-form');
+  if (!f) return;
+  window.poetEd = {
+    trackId: Number(f.getAttribute('data-track-id')),
+    ext: f.getAttribute('data-ext') || '',
+    hasArt: f.getAttribute('data-has-art') === '1',
+    art: 'keep', lrc: [], lrcKey: null, tick: null
+  };
+  poetEdArtRender();
+  poetEdRenamePreview();
+  poetEd.tick = setInterval(poetLrcTick, 100);
+}
+function poetCloseEditor() {
+  if (window.poetEd && poetEd.tick) clearInterval(poetEd.tick);
+  window.poetEd = null;
+  document.getElementById('modal-root').innerHTML = '';
+}
+function poetEdTab(name) {
+  document.querySelectorAll('.ed-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
+  document.querySelectorAll('.ed-pane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
+}
+function poetEdToggleRename() {
+  var sw = document.getElementById('ed-rename-switch');
+  var on = !sw.classList.contains('on');
+  sw.classList.toggle('on', on);
+  document.getElementById('ed-rename-flag').value = on ? '1' : '0';
+  document.getElementById('ed-rename-detail').hidden = !on;
+  if (on) poetEdRenamePreview();
+}
+function poetEdRenamePreview() {
+  var pat = (document.getElementById('ed-rename-pattern') || {}).value || '';
+  var g = function (n) { var el = document.querySelector('#ed-form [name="' + n + '"]'); return el ? el.value.trim() : ''; };
+  var track = g('trackNo') || '00';
+  var out = pat.replace(/%track%/g, track).replace(/%title%/g, g('title') || 'Untitled')
+    .replace(/%artist%/g, g('artist') || 'Unknown').replace(/%album%/g, g('album') || 'Album');
+  out = out.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+  var prev = document.getElementById('ed-rename-preview');
+  if (prev) prev.textContent = out;
+}
+function poetEdPickArt() {
+  fetch('/api/tageditor/pick-art', { method: 'POST' });
+}
+/* called from native (MainActivity) once the gallery image is loaded */
+function poetArtPicked() {
+  if (!window.poetEd) return;
+  poetEd.art = 'custom';
+  document.getElementById('ed-art-action').value = 'custom';
+  poetEdArtRender();
+}
+function poetEdArt(action) {
+  if (!window.poetEd) return;
+  poetEd.art = action;
+  document.getElementById('ed-art-action').value = action;
+  poetEdArtRender();
+}
+function poetEdArtRender() {
+  var tile = document.getElementById('ed-art-tile');
+  if (!tile) return;
+  var showsArt = false, html;
+  if (poetEd.art === 'custom') {
+    html = '<img src="/api/tageditor/art-preview?t=' + Date.now() + '" alt="">'; showsArt = true;
+  } else if (poetEd.art === 'keep' && poetEd.hasArt) {
+    html = '<img src="/api/art/' + poetEd.trackId + '" alt="">'; showsArt = true;
+  } else {
+    html = '<div class="ed-art-empty"><div class="g">♪</div><div style="font-size:13px; font-weight:600; margin-top:4px;">No artwork</div></div>';
+  }
+  tile.innerHTML = html;
+  /* header thumb tracks the choice; falls back to a note glyph when cleared */
+  var head = document.getElementById('ed-head-art');
+  if (head) head.innerHTML = showsArt ? html : '<span style="font-size:16px;">♪</span>';
+  var remove = document.getElementById('ed-art-remove');
+  var restore = document.getElementById('ed-art-restore');
+  if (remove) remove.hidden = !showsArt;
+  if (restore) restore.hidden = !(poetEd.art === 'remove' && poetEd.hasArt);
+}
+function poetEdLyricMode(mode) {
+  document.querySelectorAll('.ed-seg-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-mode') === mode); });
+  document.getElementById('ed-lyric-unsynced').hidden = mode !== 'unsynced';
+  document.getElementById('ed-lyric-synced').hidden = mode !== 'synced';
+  if (mode === 'synced') { poetLrcBuild(); poetLrcRender(); }
+}
+function poetLrcBuild() {
+  var ta = document.getElementById('ed-lyrics');
+  var lines = (ta ? ta.value : '').split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x.length; });
+  var key = lines.join('');
+  if (poetEd.lrcKey !== key) {
+    poetEd.lrc = lines.map(function (t) { return { text: t, t: null }; });
+    poetEd.lrcKey = key;
+  }
+}
+function poetLrcPos() {
+  var s = poetLastState;
+  if (!s || s.trackId !== window.poetEd.trackId) return 0;
+  var p = s.pos + (s.playing ? (Date.now() - s._at) : 0);
+  if (s.dur > 0 && p > s.dur) p = s.dur;
+  return p < 0 ? 0 : p;
+}
+function poetLrcPlay() {
+  var s = poetLastState;
+  if (s && s.trackId === window.poetEd.trackId) fetch('/api/player/toggle', { method: 'POST' });
+  else fetch('/api/player/play/' + window.poetEd.trackId + '?ctx=songs', { method: 'POST' });
+}
+function poetLrcStamp() {
+  if (!window.poetEd) return;
+  var idx = poetEd.lrc.findIndex(function (l) { return l.t === null; });
+  if (idx === -1) return;
+  poetEd.lrc[idx].t = poetLrcPos();
+  poetLrcRender();
+}
+function poetLrcReset() {
+  if (!window.poetEd) return;
+  poetEd.lrc.forEach(function (l) { l.t = null; });
+  poetLrcRender();
+}
+function poetLrcSeek(i) {
+  var l = window.poetEd && poetEd.lrc[i];
+  if (l && l.t !== null && poetLastState && poetLastState.trackId === poetEd.trackId) {
+    fetch('/api/player/seek', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'pos=' + Math.round(l.t) });
+  }
+}
+function poetLrcPad(n) { return n < 10 ? '0' + n : '' + n; }
+function poetLrcClock(ms) {
+  var t = Math.max(0, Math.floor(ms)); var m = Math.floor(t / 60000); var s = Math.floor((t % 60000) / 1000); var cs = Math.floor((t % 1000) / 10);
+  return poetLrcPad(m) + ':' + poetLrcPad(s) + '.' + poetLrcPad(cs);
+}
+function poetLrcRender() {
+  var wrap = document.getElementById('ed-lrc-rows');
+  if (!wrap || !window.poetEd) return;
+  var lrc = poetEd.lrc;
+  if (lrc.length === 0) {
+    wrap.innerHTML = '<div class="ed-lrc-empty">Add lines in the Unsynced tab first, then stamp them here.</div>';
+  } else {
+    var nextIdx = lrc.findIndex(function (l) { return l.t === null; });
+    wrap.innerHTML = lrc.map(function (l, i) {
+      var cls = 'ed-lrc-row' + (l.t !== null ? ' stamped' : '') + (i === nextIdx ? ' next' : '');
+      var stamp = l.t !== null ? '[' + poetLrcClock(l.t) + ']' : '[--:--.--]';
+      var badge = i === nextIdx ? '<span class="ed-lrc-badge">NEXT</span>' : '';
+      return '<div class="' + cls + '" data-i="' + i + '" onclick="poetLrcSeek(' + i + ')"><span class="stamp">' + stamp + '</span><span class="txt"></span>' + badge + '</div>';
+    }).join('');
+    /* set text via textContent to avoid injecting user lyric HTML */
+    wrap.querySelectorAll('.ed-lrc-row').forEach(function (row) { row.querySelector('.txt').textContent = lrc[Number(row.getAttribute('data-i'))].text; });
+  }
+  var stamped = lrc.filter(function (l) { return l.t !== null; }).length;
+  var count = document.getElementById('ed-lrc-count');
+  if (count) count.textContent = stamped + ' of ' + lrc.length + ' lines stamped';
+  var exp = document.getElementById('ed-lrc-export');
+  if (exp) exp.textContent = (lrc.length > 0 && stamped === lrc.length) ? 'Export .lrc file ✓' : 'Export .lrc file (' + stamped + '/' + lrc.length + ')';
+}
+function poetLrcTick() {
+  var clock = document.getElementById('ed-lrc-clock');
+  if (!clock) { if (window.poetEd && poetEd.tick) { clearInterval(poetEd.tick); poetEd.tick = null; } return; }
+  var synced = document.getElementById('ed-lyric-synced');
+  if (!synced || synced.hidden) return;
+  var pos = poetLrcPos();
+  clock.textContent = poetLrcClock(pos);
+  var play = document.getElementById('ed-lrc-play');
+  if (play) { var pl = (poetLastState && poetLastState.trackId === poetEd.trackId && poetLastState.playing); if (play._pl !== pl) { play._pl = pl; play.innerHTML = pl ? ICON_PAUSE_SM : ICON_PLAY_SM; } }
+  var active = -1;
+  poetEd.lrc.forEach(function (l, i) { if (l.t !== null && l.t <= pos) active = i; });
+  document.querySelectorAll('#ed-lrc-rows .ed-lrc-row').forEach(function (row) {
+    row.classList.toggle('active', Number(row.getAttribute('data-i')) === active);
+  });
+}
+function poetLrcExport() {
+  if (!window.poetEd) return;
+  var stamped = poetEd.lrc.filter(function (l) { return l.t !== null; }).sort(function (a, b) { return a.t - b.t; });
+  if (stamped.length === 0) { poetToast('Stamp at least one line first'); return; }
+  var text = stamped.map(function (l) { return '[' + poetLrcClock(l.t) + ']' + l.text; }).join('\n') + '\n';
+  fetch('/api/tageditor/' + poetEd.trackId + '/save-lrc', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'lrc=' + encodeURIComponent(text)
+  });
+}
+
 /* back-button support: Android calls poetBack() */
 function poetBack() {
-  if (document.getElementById('modal-root').innerHTML !== '') { document.getElementById('modal-root').innerHTML = ''; return 'handled'; }
+  if (document.getElementById('modal-root').innerHTML !== '') { poetCloseEditor(); document.getElementById('modal-root').innerHTML = ''; return 'handled'; }
   if (document.getElementById('sheet-root').innerHTML !== '') { closeSheet(); return 'handled'; }
   if (document.getElementById('queue-root').innerHTML !== '') { closeQueue(); return 'handled'; }
   if (document.querySelector('.menu')) { closeMenus(); return 'handled'; }

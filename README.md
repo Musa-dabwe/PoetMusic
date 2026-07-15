@@ -29,8 +29,14 @@ and shows lockscreen / notification controls.
 - **Playback persistence** — the queue (including the exact shuffle order), position,
   shuffle/repeat/speed modes survive app restarts (restored paused).
 - **Playlists & favourites** — long-press any song for quick actions: play next, add
-  to queue, add to playlist, favourite, edit tags (ID3v2 written in place for MP3s),
-  remove from library.
+  to queue, add to playlist, favourite, edit tags, remove from library.
+- **Tag editor** — a full-height three-tab sheet (Details / Artwork / Lyrics) that
+  writes ID3v2 frames straight into MP3 files. Details covers title, artist, album,
+  album artist, genre, year, track/disc number, composer and comment, with an optional
+  "rename file from tags" pattern. Artwork embeds a cover picked from the gallery or
+  strips the existing one. Lyrics stores unsynced text (USLT) and includes a synced-LRC
+  maker that stamps `[mm:ss.xx]` timestamps against live playback and exports a sidecar
+  `.lrc`. Non-MP3 formats save to the library only.
 - **Theming** — pastel accent colors and canvas tints; the Android status bar follows
   the selected accent color.
 

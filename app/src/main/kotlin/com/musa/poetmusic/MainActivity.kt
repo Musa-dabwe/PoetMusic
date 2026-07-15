@@ -22,6 +22,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.musa.poetmusic.data.LibraryScanner
+import com.musa.poetmusic.data.TagEditor
 import com.musa.poetmusic.playback.PlaybackService
 import com.musa.poetmusic.server.PoetServer
 import com.musa.poetmusic.widget.PoetWidgetProvider
@@ -54,6 +55,25 @@ class MainActivity : AppCompatActivity() {
     private val askPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
+    /** Gallery image picker for the tag editor's album-art grabber. */
+    private val pickArt = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        thread {
+            val ok = runCatching {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: return@runCatching false
+                // Guard the heap: cover art past a few MB is almost never intended.
+                if (bytes.size > MAX_ART_BYTES) return@runCatching false
+                val mime = contentResolver.getType(uri)?.takeIf { it.startsWith("image/") } ?: "image/jpeg"
+                TagEditor.pendingArt = bytes
+                TagEditor.pendingArtMime = mime
+                true
+            }.getOrDefault(false)
+            if (ok) runJs("poetArtPicked();")
+            else runJs("poetToast('Could not load that image (max 8 MB).');")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -69,6 +89,9 @@ class MainActivity : AppCompatActivity() {
         }
         PoetServer.pinWidgetRequester = {
             runOnUiThread { requestPinWidget() }
+        }
+        PoetServer.pickArtRequester = {
+            runOnUiThread { runCatching { pickArt.launch("image/*") } }
         }
         LibraryScanner.onFinished = {
             runJs("poetToast('Library scan finished'); if (poetScreenUrl.indexOf('/screens/library') === 0) poetGo(poetScreenUrl);")
@@ -205,9 +228,15 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         PoetServer.addFolderRequester = null
         PoetServer.pinWidgetRequester = null
+        PoetServer.pickArtRequester = null
+        TagEditor.clearPendingArt()
         // Drop the WebView disk cache (album art HTTP responses); 'false'
         // keeps cookies and DOM storage intact.
         if (::web.isInitialized) web.clearCache(false)
         super.onDestroy()
+    }
+
+    private companion object {
+        const val MAX_ART_BYTES = 8 * 1024 * 1024
     }
 }

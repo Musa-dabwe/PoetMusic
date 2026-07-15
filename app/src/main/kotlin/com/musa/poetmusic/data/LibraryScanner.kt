@@ -106,6 +106,9 @@ object LibraryScanner {
             var trackNo = 0
             var genre = ""
             var year = ""
+            var albumArtist = ""
+            var discNo = 0
+            var composer = ""
             var hasArt = false
             val mmr = MediaMetadataRetriever()
             try {
@@ -122,6 +125,10 @@ object LibraryScanner {
                     mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
                         ?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) }?.let { year = it }
                 }
+                mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)?.takeIf { it.isNotBlank() }?.let { albumArtist = it }
+                mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)
+                    ?.substringBefore('/')?.trim()?.toIntOrNull()?.let { discNo = it }
+                mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_COMPOSER)?.takeIf { it.isNotBlank() }?.let { composer = it }
                 hasArt = mmr.embeddedPicture != null
             } catch (_: Exception) {
                 // Unreadable file; index it by name only.
@@ -132,7 +139,8 @@ object LibraryScanner {
             db.upsertTrack(
                 uri = docUri.toString(), parentUri = parentUri, displayName = child.name,
                 title = title, artist = artist, album = album, durationMs = durationMs,
-                trackNo = trackNo, genre = genre, year = year, hasArt = hasArt,
+                trackNo = trackNo, genre = genre, year = year,
+                albumArtist = albumArtist, discNo = discNo, composer = composer, hasArt = hasArt,
                 lrcUri = lrcByBase[base.lowercase()], folderId = folderId, lastModified = child.lastModified
             )
             seen += docUri.toString()

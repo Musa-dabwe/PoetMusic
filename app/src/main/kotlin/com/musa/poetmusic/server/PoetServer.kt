@@ -40,6 +40,9 @@ object PoetServer {
     /** Set by MainActivity so the frontend can request pinning the home screen widget. */
     @Volatile var pinWidgetRequester: (() -> Unit)? = null
 
+    /** Set by MainActivity so the tag editor can open the gallery image picker. */
+    @Volatile var pickArtRequester: (() -> Unit)? = null
+
     private var started = false
 
     /** In-memory LRU for extracted album art, bounded by bytes rather than
@@ -47,6 +50,11 @@ object PoetServer {
     private const val ART_CACHE_MAX_BYTES = 12 * 1024 * 1024
     private var artCacheBytes = 0L
     private val artCache = LinkedHashMap<Long, ByteArray>(16, 0.75f, true)
+
+    /** Drop a track's cached cover so the next request re-extracts it (after a tag edit). */
+    private fun artCacheEvict(id: Long) = synchronized(artCache) {
+        artCache.remove(id)?.let { artCacheBytes -= it.size }
+    }
 
     private fun artCachePut(id: Long, art: ByteArray) = synchronized(artCache) {
         // Oversized covers would evict everything else; serve them uncached.
@@ -196,10 +204,12 @@ object PoetServer {
 
                 get("/api/player/state") {
                     val s = PlayerController.snapshot
-                    val fav = s.trackId >= 0 && db.track(s.trackId)?.favorite == true
+                    val track = if (s.trackId >= 0) db.track(s.trackId) else null
+                    val fav = track?.favorite == true
+                    val mod = track?.lastModified ?: 0
                     val json = """{"trackId":${s.trackId},"title":${jsonStr(s.title)},"artist":${jsonStr(s.artist)},""" +
                         """"pos":${s.positionMs},"dur":${s.durationMs},"playing":${s.playing},"shuffle":${s.shuffle},""" +
-                        """"repeat":${s.repeatMode},"speed":${s.speed},"sleep":${s.sleepRemainingMs},"hasQueue":${s.hasQueue},"fav":$fav}"""
+                        """"repeat":${s.repeatMode},"speed":${s.speed},"sleep":${s.sleepRemainingMs},"hasQueue":${s.hasQueue},"fav":$fav,"mod":$mod}"""
                     call.respondText(json, ContentType.Application.Json)
                 }
 
@@ -347,22 +357,57 @@ object PoetServer {
                 get("/api/library/edit-tags/{id}") {
                     val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
                         ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.tagEditorSheet(t), ContentType.Text.Html)
+                    // Opening the editor clears any leftover cover pick and reads
+                    // the file-only fields (comment, embedded lyrics) for prefill.
+                    TagEditor.clearPendingArt()
+                    val extras = TagEditor.readFileExtras(app, t)
+                    val isCurrent = PlayerController.snapshot.trackId == t.id
+                    call.respondText(Views.tagEditorSheet(t, extras, isCurrent), ContentType.Text.Html)
                 }
 
                 put("/api/library/edit-tags/{id}") {
                     val id = call.parameters["id"]?.toLongOrNull() ?: return@put noContent()
                     val p = call.receiveParameters()
-                    val result = TagEditor.saveTags(
-                        app, db, id,
-                        p["title"] ?: "", p["artist"] ?: "", p["album"] ?: "",
-                        p["genre"] ?: "", p["year"] ?: "", p["trackNo"] ?: ""
+                    val form = TagEditor.Form(
+                        title = p["title"] ?: "", artist = p["artist"] ?: "", album = p["album"] ?: "",
+                        albumArtist = p["albumArtist"] ?: "", genre = p["genre"] ?: "", year = p["year"] ?: "",
+                        trackNo = p["trackNo"] ?: "", discNo = p["discNo"] ?: "", composer = p["composer"] ?: "",
+                        comment = p["comment"] ?: "", lyrics = p["lyrics"] ?: "",
+                        artAction = p["artAction"] ?: "keep",
+                        rename = p["rename"] == "1", renamePattern = p["renamePattern"] ?: ""
                     )
+                    val result = TagEditor.saveTags(app, db, id, form)
+                    if (result.artChanged) {
+                        artCacheEvict(id)
+                        WidgetRenderer.pushUpdate(app)
+                    }
+                    val artEvent = if (result.artChanged) ""","poet-art-changed":$id""" else ""
                     call.response.header(
                         "HX-Trigger",
-                        """{"poet-toast":${jsonStr(result.message)},"poet-close-modal":true,"poet-refresh":true}"""
+                        """{"poet-toast":${jsonStr(result.message)},"poet-close-modal":true,"poet-refresh":true$artEvent}"""
                     )
                     call.respond(HttpStatusCode.NoContent)
+                }
+
+                /** Fire the native gallery picker; the pick lands in TagEditor.pendingArt. */
+                post("/api/tageditor/pick-art") {
+                    val requester = pickArtRequester
+                    if (requester == null) toast("Image picker unavailable") else { requester(); noContent() }
+                }
+
+                /** Serves the cover image the user just picked, before it is saved. */
+                get("/api/tageditor/art-preview") {
+                    val art = TagEditor.pendingArt ?: return@get call.respond(HttpStatusCode.NotFound)
+                    call.response.header("Cache-Control", "no-store")
+                    call.respondBytes(art, ContentType.parse(TagEditor.pendingArtMime))
+                }
+
+                /** Export the synced-lyrics LRC built in the editor to a sidecar file. */
+                post("/api/tageditor/{id}/save-lrc") {
+                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track) ?: return@post noContent()
+                    val lrc = call.receiveParameters()["lrc"] ?: ""
+                    val result = TagEditor.saveLrc(app, db, t, lrc)
+                    toast(result.message)
                 }
 
                 post("/api/track/{id}/remove") {
