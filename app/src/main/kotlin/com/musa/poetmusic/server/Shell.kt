@@ -216,14 +216,43 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .tray-play { border:none; cursor:pointer; width:48px; height:48px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px var(--accent-shadow); }
 .tray-play:active { transform: scale(0.9); }
 
-/* queue drawer */
+/* queue panel */
 @keyframes queue-up { from { transform:translate(-50%,100%); } to { transform:translate(-50%,0); } }
+@keyframes queue-eq { 0%,100% { height:5px; } 50% { height:15px; } }
 .queue-shield { position:fixed; inset:0; z-index:64; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); }
-.queue-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; max-height:72vh; z-index:65;
-  background:#ffffff; border-radius:22px 22px 0 0; box-shadow:0 -8px 32px rgba(59,54,81,0.25);
-  padding:18px 16px calc(14px + env(safe-area-inset-bottom)) 16px; display:flex; flex-direction:column; animation: queue-up 0.22s ease-out; }
-.queue-list { overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
-.queue-num { width:26px; text-align:center; font-size:12px; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums; flex-shrink:0; }
+.queue-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; max-height:86vh; z-index:65;
+  background:var(--bg); border-radius:22px 22px 0 0; box-shadow:0 -8px 32px rgba(59,54,81,0.25);
+  padding:16px 16px calc(14px + env(safe-area-inset-bottom)) 16px; display:flex; flex-direction:column; animation: queue-up 0.22s ease-out; }
+#qp-body { overflow-y:auto; min-height:0; padding:2px 0 4px 0; }
+.qp-hdr { display:flex; align-items:center; gap:12px; padding:0 2px 10px 2px; flex-shrink:0; }
+.qp-back { border:none; cursor:pointer; width:38px; height:38px; border-radius:12px; background:rgba(59,54,81,0.06);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.qp-back:active { transform:scale(0.92); }
+.qp-title { font-size:19px; font-weight:700; letter-spacing:-0.02em; }
+.qp-src { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qp-clear { border:none; background:transparent; cursor:pointer; font-size:13px; font-weight:600; color:var(--muted); padding:8px 10px; border-radius:10px; flex-shrink:0; }
+.qp-clear:active { transform:scale(0.95); background:rgba(59,54,81,0.06); }
+.qp-label { display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:700; letter-spacing:0.06em;
+  text-transform:uppercase; color:var(--muted); margin:8px 6px 10px 6px; }
+.qp-meta { font-size:12px; font-weight:400; color:var(--muted); text-transform:none; letter-spacing:0; }
+.qp-now { display:flex; align-items:center; gap:13px; padding:12px 14px; border-radius:18px; background:var(--accent-faint); box-shadow:0 4px 16px var(--accent-shadow); }
+.qp-eq { display:flex; align-items:flex-end; gap:3px; height:16px; margin-right:2px; flex-shrink:0; }
+.qp-eq span { width:3px; background:var(--ink); border-radius:2px; animation:queue-eq 0.9s ease-in-out infinite; }
+.qp-eq span:nth-child(2) { animation-delay:0.25s; }
+.qp-eq span:nth-child(3) { animation-delay:0.5s; }
+.qp-eq.off { visibility:hidden; }
+.qp-playbtn { border:none; cursor:pointer; width:42px; height:42px; border-radius:50%; background:var(--accent);
+  display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px var(--accent-shadow); flex-shrink:0; }
+.qp-playbtn:active { transform:scale(0.9); }
+#qp-list { display:flex; flex-direction:column; gap:2px; }
+.q-row { display:flex; align-items:center; gap:10px; padding:9px 10px 9px 8px; border-radius:14px; animation:poet-fade 0.25s ease; transition:transform 0.1s, background 0.2s; }
+.q-row.dragging { position:relative; z-index:5; background:#ffffff; box-shadow:0 8px 24px rgba(59,54,81,0.25); }
+.q-num { width:20px; text-align:center; font-size:13px; font-weight:700; color:#b4aecb; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.q-x { border:none; background:transparent; cursor:pointer; width:32px; height:32px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center; color:#b4aecb; flex-shrink:0; }
+.q-x:active { transform:scale(0.9); background:rgba(59,54,81,0.08); color:var(--muted); }
+.q-grab { width:24px; padding:8px 0; display:flex; flex-direction:column; gap:3px; align-items:center; flex-shrink:0; cursor:grab; touch-action:none; }
+.q-grab span { width:14px; height:2px; border-radius:2px; background:#cfc9de; }
 
 /* modal + toast */
 #modal-root .modal-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; padding:24px; }
@@ -318,6 +347,7 @@ var poetSeeking = false;
 var poetShownTrack = -1;
 var poetTrayTrack = -2;
 var poetLastState = null;
+var poetQueueDrag = false;
 
 function fmt(ms) {
   var s = Math.floor(ms / 1000), m = Math.floor(s / 60); s = s % 60;
@@ -431,6 +461,41 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
   document.addEventListener('touchcancel', function () { if (timer) { clearTimeout(timer); timer = null; } });
 })();
 
+/* ---- queue panel: drag the grab handle to reorder upcoming songs ----
+   The handle has touch-action:none, so the browser never scrolls the panel
+   during a drag; rows are live-reordered in the DOM and the final position
+   is committed to the player with /api/queue/move on release. */
+(function () {
+  var row = null, list = null, fromQi = -1;
+  document.addEventListener('touchstart', function (e) {
+    var grab = e.target.closest('.q-grab');
+    if (!grab) return;
+    row = grab.closest('.q-row');
+    list = row.parentElement;
+    fromQi = Number(row.getAttribute('data-qi'));
+    poetQueueDrag = true;
+    row.classList.add('dragging');
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!row) return;
+    var y = e.touches[0].clientY;
+    var next = row.nextElementSibling, prev = row.previousElementSibling;
+    if (next && y > next.getBoundingClientRect().top + next.offsetHeight / 2) list.insertBefore(next, row);
+    else if (prev && y < prev.getBoundingClientRect().bottom - prev.offsetHeight / 2) list.insertBefore(row, prev);
+  }, { passive: true });
+  function finishDrag() {
+    if (!row) return;
+    var dragged = row; row = null; poetQueueDrag = false;
+    dragged.classList.remove('dragging');
+    var to = Number(list.getAttribute('data-base')) + Array.prototype.indexOf.call(list.children, dragged);
+    if (to !== fromQi) {
+      htmx.ajax('POST', '/api/queue/move', { target: '#qp-body', swap: 'innerHTML', values: { from: fromQi, to: to } });
+    }
+  }
+  document.addEventListener('touchend', finishDrag);
+  document.addEventListener('touchcancel', finishDrag);
+})();
+
 /* ---- live playback state poller ---- */
 function applyState(s) {
   poetLastState = s;
@@ -462,6 +527,21 @@ function applyState(s) {
       wArt.innerHTML = s.trackId >= 0 ? '<img src="/api/art/' + s.trackId + '" alt="">' : '♪';
       document.getElementById('w-title').textContent = s.title;
       document.getElementById('w-artist').textContent = s.artist;
+    }
+  }
+
+  /* queue panel: live EQ bars + play button, re-render body when the track changes */
+  var qpState = document.getElementById('qp-state');
+  if (qpState) {
+    var qpPlay = document.getElementById('qp-play');
+    if (qpPlay) {
+      var qpIcon = s.playing ? ICON_PAUSE_SM : ICON_PLAY_SM;
+      if (qpPlay._icon !== qpIcon) { qpPlay._icon = qpIcon; qpPlay.innerHTML = qpIcon; }
+    }
+    var qpEq = document.getElementById('qp-eq');
+    if (qpEq) qpEq.classList.toggle('off', !s.playing);
+    if (!poetQueueDrag && Number(qpState.getAttribute('data-track-id')) !== s.trackId) {
+      htmx.ajax('GET', '/partial/queue-body', { target: '#qp-body', swap: 'innerHTML' });
     }
   }
 

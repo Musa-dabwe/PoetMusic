@@ -16,13 +16,18 @@ and shows lockscreen / notification controls.
   sort panel: Title A-Z, Title Z-A, Artist Descending, Artist Ascending, Date Added.
   The selected sort persists across screens and app restarts.
 - **Now Playing** — seek bar, playback speed cycling, sleep timer, synced lyrics,
-  favourite button, and a slide-up **queue** drawer showing the live play order
-  (including the active shuffle order).
+  favourite button, and a slide-up **queue panel**: a pinned Now Playing card with
+  animated EQ bars, plus a *Next up* list with per-song remove, drag-to-reorder
+  handles, and a Clear action.
+- **Musicolet-style queue** — playlists are fixed reference lists; the queue is a
+  temporary working copy. Shuffling writes a new static randomized sequence
+  (Fisher-Yates) into the queue, un-shuffling restores the original order around
+  the playing song, and *Play next* inserts right after the current track.
 - **Shuffle & repeat** — dynamic icons for *Shuffle All* vs *Play in Order*, and four
   repeat states: play-through, *Repeat Playlist*, *Repeat One Song*, and
   *Play Single Song and Stop*.
-- **Playback persistence** — the queue, position, shuffle/repeat/speed modes survive
-  app restarts (restored paused).
+- **Playback persistence** — the queue (including the exact shuffle order), position,
+  shuffle/repeat/speed modes survive app restarts (restored paused).
 - **Playlists & favourites** — long-press any song for quick actions: play next, add
   to queue, add to playlist, favourite, edit tags (ID3v2 written in place for MP3s),
   remove from library.

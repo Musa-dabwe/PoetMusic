@@ -3,7 +3,6 @@ package com.musa.poetmusic.playback
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -17,6 +16,13 @@ import java.util.concurrent.TimeUnit
  * Bridge between the Ktor server threads and the ExoPlayer instance owned by
  * PlaybackService. All player commands are posted to the main thread; server
  * threads read a periodically refreshed immutable snapshot.
+ *
+ * Queue model (Musicolet-style): the play queue is always a static, literal
+ * sequence of media items — ExoPlayer's shuffle mode is never enabled.
+ * [masterIds] remembers the source listing's original order; "shuffle"
+ * rewrites the queue with a Fisher-Yates randomized copy, and un-shuffling
+ * restores the master order around the currently playing song. "Play next"
+ * inserts directly after the current item.
  *
  * Repeat modes exposed to the UI:
  *   0 = off (play queue through, then stop)
@@ -59,6 +65,15 @@ object PlayerController {
     @Volatile var snapshot = Snapshot(); private set
     @Volatile private var store: MusicDatabase? = null
 
+    /** Human label of the listing the queue was built from ("Playing from …"). */
+    @Volatile var sourceName: String = "your library"; private set
+
+    /** Original (unshuffled) order of the last source listing; main thread only. */
+    private var masterIds: List<Long> = emptyList()
+
+    /** True while the queue holds a shuffled sequence of the master list. */
+    private var shuffleActive = false
+
     /**
      * Invoked on the main thread after every periodic snapshot refresh.
      * PoetApp points this at the home screen widget so it can push
@@ -74,6 +89,7 @@ object PlayerController {
 
     private var lastPersistAt = 0L
     private var lastPersistedIds = ""
+    private var lastPersistedMaster = ""
 
     private val refresher = object : Runnable {
         override fun run() {
@@ -102,6 +118,9 @@ object PlayerController {
         sleepDeadline = -1
         player = null
         snapshot = Snapshot()
+        masterIds = emptyList()
+        shuffleActive = false
+        sourceName = "your library"
     }
 
     private fun repeatCode(p: ExoPlayer): Int =
@@ -122,7 +141,7 @@ object PlayerController {
             positionMs = p.currentPosition.coerceAtLeast(0),
             durationMs = if (p.duration > 0) p.duration else 0,
             playing = p.isPlaying,
-            shuffle = p.shuffleModeEnabled,
+            shuffle = shuffleActive,
             repeatMode = repeatCode(p),
             speed = p.playbackParameters.speed,
             hasQueue = p.mediaItemCount > 0,
@@ -155,14 +174,21 @@ object PlayerController {
             lastPersistedIds = csv
             db.setSetting("pb_queue", csv)
         }
+        val masterCsv = masterIds.joinToString(",")
+        if (masterCsv != lastPersistedMaster) {
+            lastPersistedMaster = masterCsv
+            db.setSetting("pb_master", masterCsv)
+        }
         db.setSetting("pb_index", p.currentMediaItemIndex.toString())
         db.setSetting("pb_pos", p.currentPosition.coerceAtLeast(0).toString())
-        db.setSetting("pb_shuffle", if (p.shuffleModeEnabled) "1" else "0")
+        db.setSetting("pb_shuffle", if (shuffleActive) "1" else "0")
         db.setSetting("pb_repeat", repeatCode(p).toString())
         db.setSetting("pb_speed", p.playbackParameters.speed.toString())
+        db.setSetting("pb_source", sourceName)
     }
 
-    /** Restore the last session's queue, position and modes (paused). */
+    /** Restore the last session's queue (in its exact play order, including the
+     *  active shuffle sequence), position and modes (paused). */
     fun restoreState(db: MusicDatabase) {
         bindStore(db)
         val ids = db.getSetting("pb_queue", "")
@@ -175,9 +201,14 @@ object PlayerController {
         val shuffle = db.getSetting("pb_shuffle", "0") == "1"
         val repeat = db.getSetting("pb_repeat", "0").toIntOrNull() ?: REPEAT_OFF
         val speed = db.getSetting("pb_speed", "1.0").toFloatOrNull() ?: 1f
+        val master = db.getSetting("pb_master", "").split(',').mapNotNull { it.toLongOrNull() }
+        val source = db.getSetting("pb_source", "your library")
         onMain { p ->
             if (p.mediaItemCount > 0) return@onMain // something is already queued
-            p.shuffleModeEnabled = shuffle
+            masterIds = master.ifEmpty { ids }
+            shuffleActive = shuffle
+            sourceName = source
+            p.shuffleModeEnabled = false
             p.setMediaItems(tracks.map(::mediaItem), index, pos)
             applyRepeatCode(p, repeat)
             p.setPlaybackSpeed(speed.coerceIn(0.25f, 4f))
@@ -189,8 +220,11 @@ object PlayerController {
     // ---------- queue inspection ----------
 
     /**
-     * The queue in actual play order (honouring the active shuffle order).
-     * Safe to call from server threads: blocks briefly on the main thread.
+     * The queue in play order. The queue is a static sequence (shuffle
+     * rewrites it in place), so the literal media item order IS the play
+     * order. Safe to call from server threads: blocks briefly on the main
+     * thread, and — because the handler is FIFO — always observes the effect
+     * of any queue mutation posted before it.
      */
     fun queueItems(): List<QueueItem> {
         val p = player ?: return emptyList()
@@ -198,22 +232,16 @@ object PlayerController {
         val latch = CountDownLatch(1)
         handler.post {
             try {
-                val tl = p.currentTimeline
-                if (!tl.isEmpty) {
-                    val shuffled = p.shuffleModeEnabled
-                    val current = p.currentMediaItemIndex
-                    var i = tl.getFirstWindowIndex(shuffled)
-                    while (i != C.INDEX_UNSET) {
-                        val item = p.getMediaItemAt(i)
-                        out += QueueItem(
-                            index = i,
-                            trackId = item.mediaId.toLongOrNull() ?: -1,
-                            title = item.mediaMetadata.title?.toString() ?: "Unknown",
-                            artist = item.mediaMetadata.artist?.toString() ?: "",
-                            current = i == current
-                        )
-                        i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, shuffled)
-                    }
+                val current = p.currentMediaItemIndex
+                for (i in 0 until p.mediaItemCount) {
+                    val item = p.getMediaItemAt(i)
+                    out += QueueItem(
+                        index = i,
+                        trackId = item.mediaId.toLongOrNull() ?: -1,
+                        title = item.mediaMetadata.title?.toString() ?: "Unknown",
+                        artist = item.mediaMetadata.artist?.toString() ?: "",
+                        current = i == current
+                    )
                 }
             } finally {
                 latch.countDown()
@@ -230,6 +258,29 @@ object PlayerController {
             if (p.playbackState == Player.STATE_IDLE) p.prepare()
             p.play()
         }
+    }
+
+    /** Remove one upcoming item; the currently playing item is left alone. */
+    fun removeQueueItem(index: Int) = onMain { p ->
+        if (index in 0 until p.mediaItemCount && index != p.currentMediaItemIndex) {
+            p.removeMediaItem(index)
+        }
+    }
+
+    /** Reorder an upcoming item (drag-and-drop in the queue panel). */
+    fun moveQueueItem(from: Int, to: Int) = onMain { p ->
+        val count = p.mediaItemCount
+        if (from in 0 until count && to in 0 until count && from != p.currentMediaItemIndex) {
+            p.moveMediaItem(from, to)
+        }
+    }
+
+    /** Clear the queue down to just the currently playing song. */
+    fun clearUpcoming() = onMain { p ->
+        val cur = p.currentMediaItemIndex
+        if (p.mediaItemCount == 0) return@onMain
+        p.removeMediaItems(cur + 1, p.mediaItemCount)
+        p.removeMediaItems(0, cur)
     }
 
     private fun onMain(block: (ExoPlayer) -> Unit) {
@@ -254,18 +305,65 @@ object PlayerController {
         )
         .build()
 
-    fun setQueue(tracks: List<Track>, startIndex: Int, shuffled: Boolean, autoplay: Boolean = true) {
+    /**
+     * Replace the queue from a source listing. [tracks] is kept as the master
+     * (reference) order; when [shuffled], the queue itself becomes a new
+     * static Fisher-Yates randomized sequence played from its first item.
+     */
+    fun setQueue(
+        tracks: List<Track>,
+        startIndex: Int,
+        shuffled: Boolean,
+        source: String = "your library",
+        autoplay: Boolean = true
+    ) {
         if (tracks.isEmpty()) return
         onMain { p ->
-            p.shuffleModeEnabled = shuffled
-            p.setMediaItems(tracks.map(::mediaItem), startIndex.coerceIn(0, tracks.size - 1), 0)
+            masterIds = tracks.map { it.id }
+            shuffleActive = shuffled
+            sourceName = source
+            val ordered = if (shuffled) tracks.shuffled() else tracks
+            val start = if (shuffled) 0 else startIndex.coerceIn(0, tracks.size - 1)
+            p.shuffleModeEnabled = false
+            p.setMediaItems(ordered.map(::mediaItem), start, 0)
             p.prepare()
             p.playWhenReady = autoplay
         }
     }
 
+    /**
+     * Shuffle ON: rewrite the queue as [current song] + a static random
+     * sequence of everything else. Shuffle OFF: restore the master order
+     * around the current song; play-next insertions that aren't part of the
+     * master list keep their relative order at the end. Playback of the
+     * current song is never interrupted.
+     */
+    fun toggleShuffle() = onMain { p ->
+        val count = p.mediaItemCount
+        if (count == 0) { shuffleActive = !shuffleActive; return@onMain }
+        val cur = p.currentMediaItemIndex
+        val items = (0 until count).map { p.getMediaItemAt(it) }
+        if (!shuffleActive) {
+            val rest = items.filterIndexed { i, _ -> i != cur }.shuffled()
+            p.removeMediaItems(cur + 1, count)
+            p.removeMediaItems(0, cur)
+            p.addMediaItems(rest)
+            shuffleActive = true
+        } else {
+            val rank = masterIds.mapIndexed { i, id -> id.toString() to i }.toMap()
+            val target = items.sortedBy { rank[it.mediaId] ?: Int.MAX_VALUE }
+            val k = target.indexOfFirst { it === items[cur] }
+            p.removeMediaItems(cur + 1, count)
+            p.removeMediaItems(0, cur)
+            p.addMediaItems(0, target.subList(0, k))
+            p.addMediaItems(target.subList(k + 1, target.size))
+            shuffleActive = false
+        }
+    }
+
     fun playNext(track: Track) = onMain { p ->
         if (p.mediaItemCount == 0) {
+            masterIds = listOf(track.id)
             p.setMediaItem(mediaItem(track)); p.prepare(); p.play()
         } else {
             p.addMediaItem(p.currentMediaItemIndex + 1, mediaItem(track))
@@ -274,6 +372,7 @@ object PlayerController {
 
     fun addToQueue(track: Track) = onMain { p ->
         if (p.mediaItemCount == 0) {
+            masterIds = listOf(track.id)
             p.setMediaItem(mediaItem(track)); p.prepare(); p.play()
         } else {
             p.addMediaItem(mediaItem(track))
@@ -296,8 +395,6 @@ object PlayerController {
     }
 
     fun seekTo(positionMs: Long) = onMain { it.seekTo(positionMs.coerceAtLeast(0)) }
-
-    fun toggleShuffle() = onMain { it.shuffleModeEnabled = !it.shuffleModeEnabled }
 
     private fun applyRepeatCode(p: ExoPlayer, code: Int) {
         when (code) {
