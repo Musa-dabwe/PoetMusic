@@ -91,6 +91,102 @@ button { font-family: inherit; color: var(--ink); }
 .row-menu-btn { border:none; background:transparent; cursor:pointer; font-size:18px; color:var(--muted); padding:6px 8px; border-radius:8px; line-height:1; }
 .row-menu-btn:active { transform: scale(0.9); }
 
+/* multi-select: checkbox + selected state (toggled by body.select-mode) */
+.row-check { width:22px; height:22px; border-radius:7px; flex-shrink:0; border:2px solid rgba(59,54,81,0.28);
+  display:none; align-items:center; justify-content:center; }
+.row-check svg { display:none; }
+body.select-mode .row-check { display:flex; }
+body.select-mode .row-menu-btn { display:none; }
+.row.selected { background: var(--accent-soft); }
+.row.selected .row-check { border-color:var(--ink); background:var(--accent); }
+.row.selected .row-check svg { display:block; }
+
+/* contextual action bar (multi-select) */
+#cab { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; z-index:60;
+  background:var(--ink); padding:12px 14px calc(14px + env(safe-area-inset-bottom)) 14px;
+  box-shadow:0 -8px 28px rgba(59,54,81,0.35); animation:poet-sheet-up 0.22s cubic-bezier(0.2,0.9,0.3,1); display:none; }
+body.select-mode #cab { display:block; }
+.cab-inner { display:flex; align-items:center; gap:10px; }
+.cab-x { border:none; background:rgba(245,243,250,0.12); cursor:pointer; width:38px; height:38px; border-radius:11px;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.cab-x:active { transform:scale(0.9); }
+.cab-count { font-size:15px; font-weight:700; color:#f5f3fa; }
+.cab-all { border:none; background:transparent; cursor:pointer; font-size:12px; font-weight:600; color:rgba(245,243,250,0.7); padding:0; }
+.cab-actions { display:flex; align-items:center; gap:4px; margin-left:auto; flex-shrink:0; }
+.cab-btn { border:none; background:transparent; cursor:pointer; width:42px; height:42px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center; color:#f5f3fa; font-size:18px; line-height:1; }
+.cab-btn:active { transform:scale(0.9); }
+.cab-btn.solid { background:rgba(245,243,250,0.12); }
+
+/* options drawer */
+.drawer { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
+  max-height:90vh; overflow-y:auto; z-index:71; background:#ffffff; border-radius:24px 24px 0 0;
+  box-shadow:0 -12px 40px rgba(59,54,81,0.3); padding:12px 12px calc(20px + env(safe-area-inset-bottom)) 12px;
+  animation:poet-sheet-up 0.26s cubic-bezier(0.2,0.9,0.3,1); }
+.drawer-head { display:flex; align-items:center; gap:13px; padding:0 10px 14px 10px;
+  border-bottom:1px solid rgba(59,54,81,0.08); margin-bottom:8px; }
+.drawer-head-art { width:48px; height:48px; border-radius:12px; flex-shrink:0; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:rgba(59,54,81,0.55); }
+.drawer-head-art img { width:100%; height:100%; object-fit:cover; }
+.dsec { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#b4aecb; padding:12px 14px 6px 14px; }
+.ditem { display:flex; align-items:center; gap:14px; width:100%; border:none; background:transparent; cursor:pointer;
+  text-align:left; padding:11px 14px; border-radius:12px; transition:background 0.15s; }
+.ditem:active { transform:scale(0.99); }
+.ditem:hover { background: var(--accent-faint); }
+.dicon { width:34px; height:34px; border-radius:10px; background:var(--accent-faint); flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; }
+.dlabel { font-size:14px; font-weight:600; }
+.dlabel-sub { font-size:11px; color:var(--muted); }
+.dchev { color:#c8c3d8; font-size:18px; margin-left:auto; }
+.ditem-danger .dicon { background:rgba(220,110,120,0.14); }
+.ditem-danger .dlabel { color:#c25f6e; }
+.ditem-danger:hover { background:rgba(220,110,120,0.1); }
+
+/* drawer sub-sheets */
+.chip-choice { border:1.5px solid rgba(59,54,81,0.15); cursor:pointer; padding:9px 16px; border-radius:99px;
+  background:#ffffff; color:var(--ink); font-size:13px; font-weight:600; }
+.chip-choice:active { transform:scale(0.95); }
+.chip-choice.on { border-color:var(--ink); background:var(--accent-faint); }
+.pos-choice { flex:1; border:1.5px solid rgba(59,54,81,0.15); cursor:pointer; padding:11px 0; border-radius:12px;
+  background:#ffffff; color:var(--ink); font-size:13px; font-weight:600; }
+.pos-choice:active { transform:scale(0.97); }
+.pos-choice.on { border-color:var(--ink); background:var(--accent-faint); }
+.sheet-btn { border:none; cursor:pointer; width:100%; padding:14px; border-radius:14px; background:var(--accent);
+  font-size:14px; font-weight:700; box-shadow:0 3px 12px var(--accent-shadow); margin-top:14px; }
+.sheet-btn:active { transform:scale(0.98); }
+.pl-create { display:flex; gap:8px; margin-bottom:10px; }
+.pl-create input { flex:1; min-width:0; border:1.5px dashed rgba(59,54,81,0.2); border-radius:13px; padding:12px 14px;
+  font-family:inherit; font-size:14px; background:transparent; color:var(--ink); }
+.pl-create input:focus { outline:none; border-color:var(--accent); }
+.pl-create button { border:none; cursor:pointer; padding:0 18px; border-radius:13px; background:var(--accent); font-weight:700; }
+.pl-pick { display:flex; align-items:center; gap:12px; width:100%; border:none; cursor:pointer; text-align:left;
+  padding:10px 12px; border-radius:12px; background:transparent; }
+.pl-pick:active { transform:scale(0.99); }
+.pl-pick.on { background: var(--accent-faint); }
+.pl-check { width:22px; height:22px; border-radius:7px; flex-shrink:0; border:2px solid rgba(59,54,81,0.28);
+  display:flex; align-items:center; justify-content:center; }
+.pl-check svg { display:none; }
+.pl-pick.on .pl-check { border-color:var(--ink); background:var(--accent); }
+.pl-pick.on .pl-check svg { display:block; }
+.pl-art { width:40px; height:40px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  font-size:15px; color:rgba(59,54,81,0.5); }
+.setas-opt { display:flex; align-items:center; gap:12px; width:100%; border:1.5px solid rgba(59,54,81,0.1); cursor:pointer;
+  text-align:left; padding:14px; border-radius:13px; background:#ffffff; font-size:14px; font-weight:700; }
+.setas-opt:active { transform:scale(0.98); }
+.setas-opt:hover { background:var(--accent-faint); border-color:var(--accent); }
+
+/* centered sub-sheet modals (song info, delete confirm) */
+.center-shield { position:fixed; inset:0; z-index:72; background:rgba(59,54,81,0.4); backdrop-filter:blur(4px);
+  display:flex; align-items:center; justify-content:center; padding:28px; animation:poet-fade-in 0.15s ease; }
+.info-card { width:100%; max-width:360px; background:#ffffff; border-radius:18px; padding:22px;
+  box-shadow:0 20px 60px rgba(59,54,81,0.35); box-sizing:border-box; }
+.info-row { display:flex; justify-content:space-between; gap:16px; }
+.info-k { font-size:12px; color:var(--muted); flex-shrink:0; }
+.info-v { font-size:12px; font-weight:600; color:var(--ink); text-align:right; font-family:monospace; word-break:break-all; }
+.btn-delete { border:none; cursor:pointer; padding:11px 22px; border-radius:12px; font-size:13px; font-weight:700;
+  letter-spacing:0.04em; background:#c25f6e; color:#ffffff; box-shadow:0 2px 8px rgba(194,95,110,0.4); }
+.btn-delete:active { transform:scale(0.95); }
+
 /* context menu */
 .menu { position:absolute; right:8px; top:52px; z-index:30; background:rgba(255,255,255,0.92); backdrop-filter:blur(12px); border:1px solid rgba(59,54,81,0.1); border-radius:12px; box-shadow:0 8px 24px rgba(59,54,81,0.18); overflow:hidden; min-width:180px; animation: poet-fade 0.14s ease-out; }
 /* full-screen catcher behind an open menu: blocks click-through to the layout below */
@@ -393,6 +489,30 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
     </div>
   </div>
 
+  <div id="cab">
+    <div class="cab-inner">
+      <button class="cab-x" onclick="poetExitSelect()" aria-label="Exit selection">
+        <svg width="13" height="13" viewBox="0 0 12 12"><path d="M1 1 L11 11 M11 1 L1 11" stroke="#f5f3fa" stroke-width="2" stroke-linecap="round"></path></svg>
+      </button>
+      <div style="min-width:0;">
+        <div class="cab-count" id="cab-count">0 selected</div>
+        <button class="cab-all" id="cab-all" onclick="poetSelectAll()">Select all</button>
+      </div>
+      <div class="cab-actions">
+        <button class="cab-btn" onclick="poetBatch('play-next')" aria-label="Play next">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="1" width="10" height="2" rx="1" fill="#f5f3fa"></rect><rect x="0" y="6" width="10" height="2" rx="1" fill="#f5f3fa"></rect><rect x="0" y="11" width="7" height="2" rx="1" fill="#f5f3fa"></rect><polygon points="13,4 18,7 13,10" fill="#f5f3fa"></polygon></svg>
+        </button>
+        <button class="cab-btn" onclick="poetBatch('add-queue')" aria-label="Add to queue">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2 V14 M2 8 H14" stroke="#f5f3fa" stroke-width="2" stroke-linecap="round"></path></svg>
+        </button>
+        <button class="cab-btn" onclick="poetBatchSheet('addplaylist')" aria-label="Add to playlist">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 4 H14 M2 8 H14 M2 12 H9" stroke="#f5f3fa" stroke-width="2" stroke-linecap="round"></path></svg>
+        </button>
+        <button class="cab-btn solid" onclick="poetBatchDrawer()" aria-label="More options">⋯</button>
+      </div>
+    </div>
+  </div>
+
   <div id="queue-root"></div>
   <div id="sheet-root"></div>
   <div id="modal-root"></div>
@@ -513,7 +633,11 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
     var menu = t.querySelector('.menu');
     if (menu) positionMenu(menu);
   }
+  /* re-paint selection after the song list is filtered or re-sorted in place */
+  if (t && t.id === 'song-list' && poetInSelect()) poetRenderSel();
   if (e.detail.target && e.detail.target.id === 'main-container') {
+    /* a fresh screen invalidates any lingering selection */
+    if (poetInSelect()) poetExitSelect();
     var path = e.detail.pathInfo && (e.detail.pathInfo.finalRequestPath || e.detail.pathInfo.requestPath);
     if (path && path.indexOf('/screens/') === 0) poetScreenUrl = path;
     var lib = document.getElementById('nav-library'), set = document.getElementById('nav-settings');
@@ -528,21 +652,127 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
   }
 });
 
-/* ---- long-press on rows: open the hidden context menu ---- */
+/* ---- multi-select + options drawer ----
+   Tap a row plays it; long-press (or right-click) enters multi-select, where
+   tapping toggles the checkbox and a Contextual Action Bar appears; the ⋯
+   button opens the full options drawer. Selection lives on the client and is
+   handed to the server as a comma-separated id list on each action. */
+var poetSel = [];
+function poetInSelect() { return document.body.classList.contains('select-mode'); }
+function poetRowsAll() { return document.querySelectorAll('#main-container .row[data-track-id]'); }
+
+function poetRenderSel() {
+  document.querySelectorAll('.row[data-track-id]').forEach(function (r) {
+    r.classList.toggle('selected', poetSel.indexOf(Number(r.getAttribute('data-track-id'))) >= 0);
+  });
+  var c = document.getElementById('cab-count');
+  if (c) c.textContent = poetSel.length + ' selected';
+  var all = document.getElementById('cab-all');
+  if (all) {
+    var total = poetRowsAll().length;
+    all.textContent = (total > 0 && poetSel.length >= total) ? 'Clear all' : 'Select all';
+  }
+}
+function poetEnterSelect(id) {
+  document.body.classList.add('select-mode');
+  if (poetSel.indexOf(id) < 0) poetSel.push(id);
+  poetRenderSel();
+}
+function poetToggleSel(id) {
+  var i = poetSel.indexOf(id);
+  if (i >= 0) poetSel.splice(i, 1); else poetSel.push(id);
+  if (poetSel.length === 0) poetExitSelect(); else poetRenderSel();
+}
+function poetExitSelect() {
+  poetSel = [];
+  document.body.classList.remove('select-mode');
+  document.querySelectorAll('.row.selected').forEach(function (r) { r.classList.remove('selected'); });
+}
+function poetSelectAll() {
+  var rows = poetRowsAll();
+  if (poetSel.length >= rows.length) { poetExitSelect(); return; }
+  poetSel = Array.prototype.map.call(rows, function (r) { return Number(r.getAttribute('data-track-id')); });
+  poetRenderSel();
+}
+function poetSelIds() { return poetSel.join(','); }
+function poetSelCq() {
+  var r = document.querySelector('.row.selected[data-cq]') || document.querySelector('.row[data-cq]');
+  return r ? r.getAttribute('data-cq') : 'ctx=songs';
+}
+
+function poetOpenDrawer(url) { htmx.ajax('GET', url, { target: '#sheet-root', swap: 'innerHTML' }); }
+function poetDrawerClose() { closeSheet(); }
+function poetSubBack(ids, cq) { poetOpenDrawer('/api/library/drawer?ids=' + ids + '&' + cq); }
+/* close every drawer/sub-sheet and leave selection mode — used after an action commits */
+function poetFinish() { closeSheet(); poetExitSelect(); }
+
+/* Contextual Action Bar batch actions (read the live selection) */
+function poetBatch(kind) {
+  if (!poetSel.length) return;
+  htmx.ajax('POST', '/api/tracks/' + kind + '?ids=' + poetSelIds() + '&' + poetSelCq(), { swap: 'none' });
+  poetExitSelect();
+}
+function poetBatchSheet(kind) {
+  if (!poetSel.length) return;
+  poetOpenDrawer('/api/library/sub?kind=' + kind + '&ids=' + poetSelIds() + '&' + poetSelCq());
+}
+function poetBatchDrawer() {
+  if (!poetSel.length) return;
+  poetOpenDrawer('/api/library/drawer?ids=' + poetSelIds() + '&' + poetSelCq());
+}
+
+/* add-to-playlist sub-sheet: collect the checked playlists */
+function poetPlToggle(el) { el.classList.toggle('on'); }
+function poetAddPlaylists(ids) {
+  var pids = [];
+  document.querySelectorAll('.pl-pick.on[data-pid]').forEach(function (el) { pids.push(el.getAttribute('data-pid')); });
+  if (!pids.length) { poetToast('No playlist selected'); return; }
+  htmx.ajax('POST', '/api/tracks/add-playlists?ids=' + ids + '&pids=' + pids.join(','), { swap: 'none' });
+  poetFinish();
+}
+
+/* advanced-queue sub-sheet: choose queue + position, then commit */
+function poetAdvSel(group, val, el) {
+  window.poetAdv = window.poetAdv || { queue: 1, pos: 'Bottom' };
+  poetAdv[group] = val;
+  var siblings = el.parentElement.children;
+  for (var i = 0; i < siblings.length; i++) siblings[i].classList.remove('on');
+  el.classList.add('on');
+}
+function poetAdvAdd(ids) {
+  var adv = window.poetAdv || { queue: 1, pos: 'Bottom' };
+  htmx.ajax('POST', '/api/tracks/advqueue?ids=' + ids + '&queue=' + adv.queue + '&pos=' + adv.pos, { swap: 'none' });
+  poetFinish();
+}
+
+/* delegated row interaction: menu button, play, or select-toggle */
+document.addEventListener('click', function (e) {
+  var menuBtn = e.target.closest('.row-menu-btn');
+  if (menuBtn) {
+    var mrow = menuBtn.closest('.row[data-drawer-url]');
+    if (mrow) { e.stopPropagation(); poetOpenDrawer(mrow.getAttribute('data-drawer-url')); }
+    return;
+  }
+  var row = e.target.closest('.row[data-play-url]');
+  if (!row) return;
+  var id = Number(row.getAttribute('data-track-id'));
+  if (poetInSelect()) { poetToggleSel(id); }
+  else { fetch(row.getAttribute('data-play-url'), { method: 'POST' }).catch(function () {}); }
+});
+
+/* long-press (touch) and right-click (pointer) enter multi-select */
 (function () {
   var timer = null, fired = false, startX = 0, startY = 0;
   document.addEventListener('touchstart', function (e) {
-    var row = e.target.closest('.row[data-menu-url]');
-    if (!row) return;
+    var row = e.target.closest('.row[data-play-url]');
+    if (!row || e.target.closest('.row-menu-btn')) return;
     fired = false;
     startX = e.touches[0].clientX; startY = e.touches[0].clientY;
     timer = setTimeout(function () {
       fired = true;
       if (navigator.vibrate) navigator.vibrate(15);
-      closeMenus();
-      var slot = row.querySelector('.menu-slot');
-      if (slot) htmx.ajax('GET', row.getAttribute('data-menu-url'), { target: slot, swap: 'innerHTML' });
-    }, 480);
+      poetEnterSelect(Number(row.getAttribute('data-track-id')));
+    }, 420);
   }, { passive: true });
   document.addEventListener('touchmove', function (e) {
     if (!timer) return;
@@ -555,6 +785,10 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
   }, { passive: false });
   document.addEventListener('touchcancel', function () { if (timer) { clearTimeout(timer); timer = null; } });
 })();
+document.addEventListener('contextmenu', function (e) {
+  var row = e.target.closest('.row[data-play-url]');
+  if (row) { e.preventDefault(); poetEnterSelect(Number(row.getAttribute('data-track-id'))); }
+});
 
 /* ---- queue panel: drag the grab handle to reorder upcoming songs ----
    The handle has touch-action:none, so the browser never scrolls the panel
@@ -927,6 +1161,7 @@ function poetBack() {
   if (document.getElementById('sheet-root').innerHTML !== '') { closeSheet(); return 'handled'; }
   if (document.getElementById('queue-root').innerHTML !== '') { closeQueue(); return 'handled'; }
   if (document.querySelector('.menu')) { closeMenus(); return 'handled'; }
+  if (poetInSelect()) { poetExitSelect(); return 'handled'; }
   if (poetScreenUrl !== '/screens/library') { poetGo('/screens/library'); return 'handled'; }
   return 'exit';
 }

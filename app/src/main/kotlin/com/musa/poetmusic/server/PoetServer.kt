@@ -310,16 +310,77 @@ object PoetServer {
 
                 // ---------- library / menus ----------
 
-                get("/api/library/menu/{id}") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
-                        ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.contextMenu(db, t, queueCtx()), ContentType.Text.Html)
+                /** Full options drawer for one track (single ⋯) or a batch selection. */
+                get("/api/library/drawer") {
+                    val idsRaw = call.request.queryParameters["ids"] ?: ""
+                    val tracks = idList(idsRaw).mapNotNull(db::track)
+                    if (tracks.isEmpty()) return@get call.respondText("", ContentType.Text.Html)
+                    call.respondText(Views.optionsDrawer(db, tracks, idsRaw, queueCtx()), ContentType.Text.Html)
                 }
 
-                get("/api/library/menu/{id}/playlists") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
-                        ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.playlistSubmenu(db, t, queueCtx()), ContentType.Text.Html)
+                /** Drawer sub-sheets: advanced queue, add-to-playlist, set-as, info, delete. */
+                get("/api/library/sub") {
+                    val kind = call.request.queryParameters["kind"] ?: ""
+                    val idsRaw = call.request.queryParameters["ids"] ?: ""
+                    val tracks = idList(idsRaw).mapNotNull(db::track)
+                    if (tracks.isEmpty()) return@get call.respondText("", ContentType.Text.Html)
+                    call.respondText(Views.subSheet(kind, db, tracks, idsRaw, queueCtx()), ContentType.Text.Html)
+                }
+
+                // ---------- batch track actions (single ⋯ or multi-select) ----------
+
+                post("/api/tracks/play-now") {
+                    val tracks = idList().mapNotNull(db::track)
+                    if (tracks.isEmpty()) return@post toast("Nothing to play")
+                    val source = if (tracks.size == 1) sourceLabel(db, queueCtx()) else "Selection"
+                    PlayerController.setQueue(tracks, 0, shuffled = false, source = source)
+                    toast(if (tracks.size == 1) "Playing now" else "${tracks.size} songs playing now")
+                }
+
+                post("/api/tracks/play-next") {
+                    val tracks = idList().mapNotNull(db::track)
+                    if (tracks.isEmpty()) return@post noContent()
+                    // playNext inserts after the current track, so add in reverse to keep order.
+                    tracks.asReversed().forEach(PlayerController::playNext)
+                    toast(if (tracks.size == 1) "Playing next: ${tracks.first().title}" else "${tracks.size} songs play next")
+                }
+
+                post("/api/tracks/add-queue") {
+                    val tracks = idList().mapNotNull(db::track)
+                    if (tracks.isEmpty()) return@post noContent()
+                    tracks.forEach(PlayerController::addToQueue)
+                    toast(if (tracks.size == 1) "Added to queue: ${tracks.first().title}" else "Added ${tracks.size} to queue")
+                }
+
+                post("/api/tracks/advqueue") {
+                    val tracks = idList().mapNotNull(db::track)
+                    if (tracks.isEmpty()) return@post noContent()
+                    val queue = call.request.queryParameters["queue"]?.toIntOrNull() ?: 1
+                    val pos = call.request.queryParameters["pos"] ?: "Bottom"
+                    // The player exposes a single active queue; alternate queues are
+                    // acknowledged with a toast. Top→play next, otherwise append.
+                    if (queue == 1) {
+                        if (pos == "Top") tracks.asReversed().forEach(PlayerController::playNext)
+                        else tracks.forEach(PlayerController::addToQueue)
+                    }
+                    toast("Added to Queue $queue (${pos.lowercase()})")
+                }
+
+                post("/api/tracks/add-playlists") {
+                    val ids = idList()
+                    val pids = idList(call.request.queryParameters["pids"] ?: "")
+                    if (ids.isEmpty() || pids.isEmpty()) return@post toast("No playlist selected")
+                    pids.forEach { pid -> ids.forEach { tid -> db.addToPlaylist(pid, tid) } }
+                    val songWord = if (ids.size == 1) "song" else "songs"
+                    val plWord = if (pids.size == 1) "playlist" else "playlists"
+                    toast("Added ${ids.size} $songWord to ${pids.size} $plWord")
+                }
+
+                post("/api/tracks/delete") {
+                    val ids = idList()
+                    if (ids.isEmpty()) return@post noContent()
+                    ids.forEach(db::removeTrack)
+                    refresh(if (ids.size == 1) "Deleted 1 file" else "Deleted ${ids.size} files")
                 }
 
                 /**
@@ -422,7 +483,9 @@ object PoetServer {
                     val name = call.receiveParameters()["name"]?.trim().orEmpty()
                     if (name.isEmpty()) return@post toast("Playlist needs a name")
                     val pid = db.createPlaylist(name)
+                    // Optionally seed the new playlist with the drawer's target tracks.
                     call.request.queryParameters["trackId"]?.toLongOrNull()?.let { db.addToPlaylist(pid, it) }
+                    idList(call.request.queryParameters["ids"] ?: "").forEach { db.addToPlaylist(pid, it) }
                     refresh("Created playlist \"$name\"")
                 }
 
@@ -572,6 +635,14 @@ object PoetServer {
         "favorites" -> "Favorites"
         else -> if (ctx.q.isNotBlank()) "search “${ctx.q}”" else "All songs"
     }
+
+    /** Parse a comma-separated list of track ids. */
+    private fun idList(raw: String): List<Long> =
+        raw.split(",").mapNotNull { it.trim().toLongOrNull() }
+
+    /** Comma-separated ids from the "ids" query parameter. */
+    private fun PipelineContext<Unit, ApplicationCall>.idList(): List<Long> =
+        idList(call.request.queryParameters["ids"] ?: "")
 
     private fun PipelineContext<Unit, ApplicationCall>.queueCtx(): QueueCtx {
         val p = call.request.queryParameters

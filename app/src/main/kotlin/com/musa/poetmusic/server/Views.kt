@@ -47,20 +47,34 @@ object Views {
 
     // ---------------- shared pieces ----------------
 
+    /** Check glyph shown inside a selected row's checkbox. */
+    private val CHECK_SVG =
+        """<svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5 L4.5 8.5 L11 1" stroke="#3b3651" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>"""
+
+    /**
+     * A library song tile. Tap plays the track; long-press / right-click enters
+     * multi-select (checkbox + Contextual Action Bar); the ⋯ button opens the
+     * full options drawer. Tap-to-play and select-toggle are handled by the
+     * delegated row click handler in Shell using the data-* URLs below.
+     */
     fun songRow(t: Track, ctx: QueueCtx): String {
         val cq = ctx.query()
+        val art =
+            if (t.hasArt) """<img loading="lazy" src="/api/art/${t.id}?v=${t.lastModified}" alt="">"""
+            else esc(initials(t.title))
+        val fav = if (t.favorite) """ <span style="color:var(--accent);">♥</span>""" else ""
         return """
-        <div class="row" data-track-id="${t.id}" data-menu-url="/api/library/menu/${t.id}?$cq">
-          <div class="row-art" style="background:${artColor(t.id)};" hx-post="/api/player/play/${t.id}?$cq" hx-swap="none">${
-            if (t.hasArt) """<img loading="lazy" src="/api/art/${t.id}?v=${t.lastModified}" alt="">""" else esc(initials(t.title))
-        }</div>
-          <div class="row-main" hx-post="/api/player/play/${t.id}?$cq" hx-swap="none">
-            <div class="row-title">${esc(t.title)}${if (t.favorite) """ <span style="color:var(--accent);">♥</span>""" else ""}</div>
+        <div class="row" data-track-id="${t.id}" data-cq="${esc(cq)}"
+             data-play-url="${esc("/api/player/play/${t.id}?$cq")}"
+             data-drawer-url="${esc("/api/library/drawer?ids=${t.id}&$cq")}">
+          <div class="row-check">$CHECK_SVG</div>
+          <div class="row-art" style="background:${artColor(t.id)};">$art</div>
+          <div class="row-main">
+            <div class="row-title">${esc(t.title)}$fav</div>
             <div class="row-sub">${esc(t.artist)}</div>
           </div>
-          <div class="row-dur" hx-post="/api/player/play/${t.id}?$cq" hx-swap="none">${fmtTime(t.durationMs)}</div>
-          <button class="row-menu-btn" hx-get="/api/library/menu/${t.id}?$cq" hx-target="next .menu-slot" hx-swap="innerHTML" onclick="closeMenus()">⋯</button>
-          <div class="menu-slot"></div>
+          <div class="row-dur">${fmtTime(t.durationMs)}</div>
+          <button class="row-menu-btn" aria-label="Track options">⋯</button>
         </div>"""
     }
 
@@ -288,38 +302,234 @@ object Views {
         </div>"""
     }
 
-    // ---------------- context menu ----------------
+    // ---------------- options drawer + sub-sheets ----------------
 
-    fun contextMenu(db: MusicDatabase, t: Track, ctx: QueueCtx): String {
-        val removeFromPlaylist = if (ctx.ctx == "playlist") {
-            """<button hx-post="/api/playlist/${ctx.pid}/remove/${t.id}" hx-swap="none" onclick="closeMenus()">Remove from this playlist</button>"""
-        } else ""
+    // Drawer action icons (pastel line-art matching the Poet design).
+    private val ICON_D_PLAY = """<svg width="12" height="14" viewBox="0 0 12 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon></svg>"""
+    private val ICON_D_NEXT = """<svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="1" width="10" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="6" width="10" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="11" width="7" height="2" rx="1" fill="#3b3651"></rect><polygon points="13,4 18,7 13,10" fill="#3b3651"></polygon></svg>"""
+    private val ICON_D_QUEUE = """<svg width="16" height="14" viewBox="0 0 16 14"><rect x="0" y="1" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="6" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="11" width="8" height="2" rx="1" fill="#3b3651"></rect></svg>"""
+    private val ICON_D_QUEUE_ADV = """<svg width="16" height="14" viewBox="0 0 16 14"><rect x="0" y="1" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="6" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="11" width="12" height="2" rx="1" fill="#3b3651"></rect></svg>"""
+    private val ICON_D_PLAYLIST = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 4 H14 M2 8 H10 M2 12 H10 M13 9 V15 M10 12 H16" stroke="#3b3651" stroke-width="2" fill="none" stroke-linecap="round"></path></svg>"""
+    private val ICON_D_MOVE = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 11 L2 14 L5 14 M2 11 L9 4 L12 7 L5 14 M9 4 L11 2 L14 5 L12 7" stroke="#3b3651" stroke-width="1.4" fill="none" stroke-linejoin="round"></path></svg>"""
+    private val ICON_D_DELETE = """<svg width="14" height="16" viewBox="0 0 14 16"><path d="M2 4 H12 M5 4 V2 H9 V4 M3 4 L3.7 14 H10.3 L11 4" stroke="#c25f6e" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>"""
+    private val ICON_D_TAGS = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M11 2 L14 5 L5 14 L2 14 L2 11 Z" stroke="#3b3651" stroke-width="1.6" fill="none" stroke-linejoin="round"></path></svg>"""
+    private val ICON_D_SETAS = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1 L10 6 L15 6 L11 9 L12.5 14 L8 11 L3.5 14 L5 9 L1 6 L6 6 Z" stroke="#3b3651" stroke-width="1.3" fill="none" stroke-linejoin="round"></path></svg>"""
+    private val ICON_D_SHARE = """<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="12" cy="3" r="2" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><circle cx="4" cy="8" r="2" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><circle cx="12" cy="13" r="2" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><path d="M5.7 7 L10.3 4 M5.7 9 L10.3 12" stroke="#3b3651" stroke-width="1.5"></path></svg>"""
+    private val ICON_D_ALBUM = """<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3" stroke="#3b3651" stroke-width="1.5" fill="none"></rect><circle cx="8" cy="8" r="2" stroke="#3b3651" stroke-width="1.5" fill="none"></circle></svg>"""
+    private val ICON_D_ARTIST = """<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="5" r="3" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><path d="M2.5 14 C2.5 10.5 5 9 8 9 C11 9 13.5 10.5 13.5 14" stroke="#3b3651" stroke-width="1.5" fill="none" stroke-linecap="round"></path></svg>"""
+    private val ICON_D_FOLDER = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.5 4 L6 4 L7.5 6 L14.5 6 L14.5 13 L1.5 13 Z" stroke="#3b3651" stroke-width="1.5" fill="none" stroke-linejoin="round"></path></svg>"""
+    private val ICON_D_INFO = """<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><path d="M8 7 V11.5 M8 4.6 V5" stroke="#3b3651" stroke-width="1.6" stroke-linecap="round"></path></svg>"""
+
+    /** One tappable row inside the options drawer. */
+    private fun drawerItem(
+        icon: String, label: String, attrs: String, sub: String = "", chevron: Boolean = false, danger: Boolean = false
+    ): String {
+        val labelBlock =
+            if (sub.isEmpty()) """<span class="dlabel">$label</span>"""
+            else """<span style="flex:1;"><span class="dlabel" style="display:block;">$label</span><span class="dlabel-sub">$sub</span></span>"""
+        val chev = if (chevron) """<span class="dchev">›</span>""" else ""
+        return """<button class="ditem${if (danger) " ditem-danger" else ""}" $attrs>
+          <span class="dicon">$icon</span>$labelBlock$chev
+        </button>"""
+    }
+
+    /**
+     * Full options bottom sheet. Renders the same four grouped sections for a
+     * single track and for a batch selection; single-only items (edit tags,
+     * navigation) are hidden in batch mode. `ids` is the comma-separated target
+     * list carried into every follow-up action; `cq` re-supplies the queue
+     * context for play/navigation.
+     */
+    fun optionsDrawer(db: MusicDatabase, tracks: List<Track>, ids: String, ctx: QueueCtx): String {
+        val single = tracks.size == 1
+        val first = tracks.first()
+        val cq = ctx.query()
+        val q = "ids=$ids&$cq"
+        val headArt =
+            if (single && first.hasArt) """<img src="/api/art/${first.id}?v=${first.lastModified}" alt="">"""
+            else if (single) esc(initials(first.title)) else tracks.size.toString()
+        val headBg = if (single) artColor(first.id) else "var(--accent-faint)"
+        val title = if (single) esc(first.title) else "${tracks.size} tracks selected"
+        val sub = if (single) esc(first.artist) else "Batch actions"
+
+        // Playlist & file
+        val removeFromPlaylist =
+            if (single && ctx.ctx == "playlist" && ctx.pid != 0L)
+                drawerItem(ICON_D_PLAYLIST, "Remove from this playlist",
+                    """hx-post="/api/playlist/${ctx.pid}/remove/${first.id}" hx-swap="none" hx-on::after-request="poetFinish()"""")
+            else ""
+
+        val editTags = if (single) drawerItem(ICON_D_TAGS, "Edit tags",
+            """hx-get="/api/library/edit-tags/${first.id}" hx-target="#modal-root" hx-swap="innerHTML" hx-on::after-request="poetFinish()"""") else ""
+
+        val navSection = if (single) """
+          <div class="dsec">Navigation &amp; info</div>
+          ${drawerItem(ICON_D_ALBUM, "Go to album",
+            """hx-get="/screens/album?album=${enc(first.album)}&artist=${enc(first.artist)}" hx-target="#main-container" hx-on::after-request="poetFinish()"""")}
+          ${drawerItem(ICON_D_ARTIST, "Go to artist",
+            """hx-get="/screens/artist?name=${enc(first.artist)}" hx-target="#main-container" hx-on::after-request="poetFinish()"""")}
+          ${drawerItem(ICON_D_FOLDER, "Go to folder", """onclick="poetToast('Opening folder…'); poetFinish();"""")}
+          ${drawerItem(ICON_D_INFO, "Song info / details",
+            """hx-get="/api/library/sub?kind=info&$q" hx-target="#sheet-root" hx-swap="innerHTML"""")}
+        """ else ""
+
         return """
-        <div class="menu-shield" onclick="event.stopPropagation(); closeMenus()"></div>
-        <div class="menu" onclick="event.stopPropagation()">
-          <button hx-post="/api/queue/next/${t.id}" hx-swap="none" onclick="closeMenus()">Play next</button>
-          <button hx-post="/api/queue/add/${t.id}" hx-swap="none" onclick="closeMenus()">Add to queue</button>
-          <button hx-get="/api/library/menu/${t.id}/playlists?${ctx.query()}" hx-target="closest .menu-slot" hx-swap="innerHTML">Add to playlist ›</button>
-          <button hx-post="/api/track/${t.id}/favorite" hx-swap="none" onclick="closeMenus()">${if (t.favorite) "Remove from favorites" else "Add to favorites ♥"}</button>
-          <button hx-get="/api/library/edit-tags/${t.id}" hx-target="#modal-root" hx-swap="innerHTML" onclick="closeMenus()">Edit tags</button>
+        <div class="sheet-shield" onclick="poetDrawerClose()"></div>
+        <div class="drawer">
+          <div class="sheet-grab"></div>
+          <div class="drawer-head">
+            <div class="drawer-head-art" style="background:$headBg;">$headArt</div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:15px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">$title</div>
+              <div style="font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">$sub</div>
+            </div>
+          </div>
+
+          <div class="dsec">Playback &amp; queue</div>
+          ${drawerItem(ICON_D_PLAY, "Play now", """hx-post="/api/tracks/play-now?$q" hx-swap="none" hx-on::after-request="poetFinish()"""")}
+          ${drawerItem(ICON_D_NEXT, "Play next", """hx-post="/api/tracks/play-next?$q" hx-swap="none" hx-on::after-request="poetFinish()"""")}
+          ${drawerItem(ICON_D_QUEUE, "Add to queue", """hx-post="/api/tracks/add-queue?$q" hx-swap="none" hx-on::after-request="poetFinish()"""")}
+          ${drawerItem(ICON_D_QUEUE_ADV, "Add to queue (advanced)",
+            """hx-get="/api/library/sub?kind=advqueue&$q" hx-target="#sheet-root" hx-swap="innerHTML"""",
+            sub = "Choose queue &amp; position", chevron = true)}
+
+          <div class="dsec">Playlist &amp; file</div>
+          ${drawerItem(ICON_D_PLAYLIST, "Add to playlist",
+            """hx-get="/api/library/sub?kind=addplaylist&$q" hx-target="#sheet-root" hx-swap="innerHTML"""")}
           $removeFromPlaylist
-          <button hx-get="/partial/confirm-track/${t.id}" hx-target="#modal-root" hx-swap="innerHTML" onclick="closeMenus()" style="color:#b85c5c;">Remove from library</button>
+          ${drawerItem(ICON_D_MOVE, "Modify / move", """onclick="poetToast('Move / rename — opening file manager'); poetFinish();"""")}
+          ${drawerItem(ICON_D_DELETE, "Delete from device",
+            """hx-get="/api/library/sub?kind=delete&$q" hx-target="#sheet-root" hx-swap="innerHTML"""", danger = true)}
+
+          <div class="dsec">Metadata &amp; utilities</div>
+          $editTags
+          ${drawerItem(ICON_D_SETAS, "Set as…",
+            """hx-get="/api/library/sub?kind=setas&$q" hx-target="#sheet-root" hx-swap="innerHTML"""",
+            sub = "Ringtone, notification, alarm", chevron = true)}
+          ${drawerItem(ICON_D_SHARE, "Share", """onclick="poetToast('Opening share sheet…'); poetFinish();"""")}
+
+          $navSection
         </div>"""
     }
 
-    fun playlistSubmenu(db: MusicDatabase, t: Track, ctx: QueueCtx): String {
-        val items = db.playlists().joinToString("") { p ->
-            """<button hx-post="/api/playlist/${p.id}/add/${t.id}" hx-swap="none" onclick="closeMenus()">${esc(p.name)}</button>"""
+    /** Dispatches a drawer sub-sheet by kind. */
+    fun subSheet(kind: String, db: MusicDatabase, tracks: List<Track>, ids: String, ctx: QueueCtx): String {
+        val cq = ctx.query()
+        val back = "poetSubBack('$ids','${esc(cq)}')"
+        return when (kind) {
+            "advqueue" -> advQueueSheet(ids, back)
+            "addplaylist" -> addPlaylistSheet(db, tracks, ids, back)
+            "setas" -> setAsSheet(back)
+            "info" -> songInfoSheet(tracks.first(), back)
+            "delete" -> deleteConfirmSheet(tracks, ids, back)
+            else -> ""
+        }
+    }
+
+    private fun targetLabel(tracks: List<Track>): String =
+        if (tracks.size == 1) "“${esc(tracks.first().title)}”"
+        else "${tracks.size} songs"
+
+    private fun advQueueSheet(ids: String, back: String): String {
+        val queues = (1..4).joinToString("") { n ->
+            """<button class="chip-choice${if (n == 1) " on" else ""}" onclick="poetAdvSel('queue',$n,this)">Queue $n</button>"""
+        }
+        val positions = listOf("Top", "Bottom", "Random").joinToString("") { p ->
+            """<button class="pos-choice${if (p == "Bottom") " on" else ""}" onclick="poetAdvSel('pos','$p',this)">$p</button>"""
         }
         return """
-        <div class="menu-shield" onclick="event.stopPropagation(); closeMenus()"></div>
-        <div class="menu" onclick="event.stopPropagation()">
-          <button hx-get="/api/library/menu/${t.id}?${ctx.query()}" hx-target="closest .menu-slot" hx-swap="innerHTML">‹ Back</button>
-          $items
-          <form class="menu-form" hx-post="/api/playlist/create?trackId=${t.id}" hx-swap="none" hx-on::after-request="closeMenus()">
-            <input name="name" placeholder="New playlist" required>
-            <button type="submit">＋</button>
+        <div class="sheet-shield" onclick="$back"></div>
+        <div class="sheet">
+          <div class="sheet-grab"></div>
+          <div class="sheet-title" style="margin-bottom:12px;">Add to queue</div>
+          <div style="font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; margin-bottom:8px;">Which queue</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;">$queues</div>
+          <div style="font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; margin-bottom:8px;">Position</div>
+          <div style="display:flex; gap:8px; margin-bottom:20px;">$positions</div>
+          <button class="sheet-btn" style="margin-top:0;" onclick="poetAdvAdd('$ids')">Add</button>
+        </div>
+        <script>window.poetAdv={queue:1,pos:'Bottom'};</script>"""
+    }
+
+    private fun addPlaylistSheet(db: MusicDatabase, tracks: List<Track>, ids: String, back: String): String {
+        val picks = db.playlists().joinToString("") { p ->
+            """
+            <button class="pl-pick" data-pid="${p.id}" onclick="poetPlToggle(this)">
+              <span class="pl-check">$CHECK_SVG</span>
+              <span class="pl-art" style="background:${artColor(p.id)};">♪</span>
+              <span style="flex:1;"><span style="font-size:14px; font-weight:600; display:block;">${esc(p.name)}</span><span style="font-size:12px; color:var(--muted);">${p.trackCount} songs</span></span>
+            </button>"""
+        }.ifBlank { """<div style="font-size:12px; color:var(--muted); padding:6px 2px;">No playlists yet — create one below.</div>""" }
+        return """
+        <div class="sheet-shield" onclick="$back"></div>
+        <div class="sheet sheet-tall">
+          <div class="sheet-grab"></div>
+          <div class="sheet-title" style="margin-bottom:4px;">Add to playlist</div>
+          <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">${targetLabel(tracks)}</div>
+          <form class="pl-create" hx-post="/api/playlist/create?ids=$ids" hx-swap="none"
+                hx-on::after-request="poetFinish()">
+            <input name="name" placeholder="Create new playlist…" required>
+            <button type="submit">Create</button>
           </form>
+          <div style="display:flex; flex-direction:column; gap:4px;">$picks</div>
+          <button class="sheet-btn" onclick="poetAddPlaylists('$ids')">Done</button>
+        </div>"""
+    }
+
+    private fun setAsSheet(back: String): String {
+        val opts = listOf("Ringtone", "Notification sound", "Alarm").joinToString("") { x ->
+            """<button class="setas-opt" onclick="poetToast('Set as ${x.lowercase()}'); poetFinish();">$x</button>"""
+        }
+        return """
+        <div class="sheet-shield" onclick="$back"></div>
+        <div class="sheet">
+          <div class="sheet-grab"></div>
+          <div class="sheet-title" style="margin-bottom:12px;">Set track as</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">$opts</div>
+        </div>"""
+    }
+
+    private fun songInfoSheet(t: Track, back: String): String {
+        val ext = t.displayName.substringAfterLast('.', "").uppercase().ifBlank { "—" }
+        val added = if (t.dateAdded > 0)
+            java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US).format(java.util.Date(t.dateAdded)) else "—"
+        val rows = listOf(
+            "File name" to t.displayName,
+            "Format" to ext,
+            "Duration" to fmtTime(t.durationMs),
+            "Album" to t.album.ifBlank { "—" },
+            "Track / disc" to "${if (t.trackNo > 0) t.trackNo else "—"} / ${if (t.discNo > 0) t.discNo else "—"}",
+            "Year" to t.year.ifBlank { "—" },
+            "Date added" to added
+        ).joinToString("") { (k, v) ->
+            """<div class="info-row"><span class="info-k">$k</span><span class="info-v">${esc(v)}</span></div>"""
+        }
+        return """
+        <div class="center-shield" onclick="if(event.target===this) $back">
+          <div class="info-card">
+            <div style="font-size:16px; font-weight:700; margin-bottom:2px;">${esc(t.title)}</div>
+            <div style="font-size:12px; color:var(--muted); margin-bottom:16px;">${esc(t.artist)}</div>
+            <div style="display:flex; flex-direction:column; gap:10px;">$rows</div>
+            <button class="btn-primary" style="width:100%; justify-content:center; margin-top:18px;" onclick="$back">Close</button>
+          </div>
+        </div>"""
+    }
+
+    private fun deleteConfirmSheet(tracks: List<Track>, ids: String, back: String): String {
+        val msg =
+            if (tracks.size == 1) "Delete “${esc(tracks.first().title)}”?"
+            else "Delete ${tracks.size} songs?"
+        return """
+        <div class="center-shield" onclick="if(event.target===this) $back">
+          <div class="confirm-card">
+            <div class="confirm-title">Delete from device</div>
+            <div class="confirm-msg">$msg This removes the track${if (tracks.size == 1) "" else "s"} from your library.</div>
+            <div class="confirm-actions">
+              <button class="btn-ghost" onclick="$back">CANCEL</button>
+              <button class="btn-delete" hx-post="/api/tracks/delete?ids=$ids" hx-swap="none"
+                      hx-on::after-request="poetFinish()">DELETE</button>
+            </div>
+          </div>
         </div>"""
     }
 
