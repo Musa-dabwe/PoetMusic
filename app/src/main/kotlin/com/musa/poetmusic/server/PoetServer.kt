@@ -8,6 +8,7 @@ import com.musa.poetmusic.data.LrcParser
 import com.musa.poetmusic.data.MusicDatabase
 import com.musa.poetmusic.data.TagEditor
 import com.musa.poetmusic.playback.PlayerController
+import com.musa.poetmusic.widget.WidgetRenderer
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -35,6 +36,9 @@ object PoetServer {
 
     /** Set by MainActivity so the frontend can open the SAF folder picker. */
     @Volatile var addFolderRequester: (() -> Unit)? = null
+
+    /** Set by MainActivity so the frontend can request pinning the home screen widget. */
+    @Volatile var pinWidgetRequester: (() -> Unit)? = null
 
     private var started = false
 
@@ -231,6 +235,8 @@ object PoetServer {
                     val t = if (s.trackId >= 0) db.track(s.trackId) else null
                     if (t == null) return@post toast("Nothing is playing")
                     db.setFavorite(t.id, !t.favorite)
+                    // The full-size widget shows the heart; keep it honest.
+                    WidgetRenderer.pushUpdate(app)
                     toast(if (t.favorite) "Removed from Favourites" else "Added to Favourites ♥")
                 }
 
@@ -395,14 +401,30 @@ object PoetServer {
 
                 post("/api/settings/accent") {
                     val c = call.receiveParameters()["c"] ?: return@post noContent()
-                    if (c.matches(Regex("#[0-9a-fA-F]{6}"))) db.setSetting("accent", c)
+                    if (c.matches(Regex("#[0-9a-fA-F]{6}"))) {
+                        db.setSetting("accent", c)
+                        // Recolor the home screen widget in the same breath.
+                        WidgetRenderer.pushUpdate(app)
+                    }
                     noContent()
                 }
 
                 post("/api/settings/theme") {
                     val name = call.receiveParameters()["name"] ?: return@post noContent()
-                    if (name in Shell.CANVAS_TINTS) db.setSetting("theme", name)
+                    if (name in Shell.CANVAS_TINTS) {
+                        db.setSetting("theme", name)
+                        WidgetRenderer.pushUpdate(app)
+                    }
                     noContent()
+                }
+
+                post("/api/widget/pin") {
+                    val requester = pinWidgetRequester
+                    if (requester == null) toast("Widget pinning is unavailable right now")
+                    else {
+                        requester.invoke()
+                        noContent()
+                    }
                 }
 
                 // ---------- media ----------

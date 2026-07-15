@@ -603,9 +603,10 @@ object Views {
           </div>
 
           <div class="card">
-            <div class="card-title">Notification widget</div>
-            <div class="card-sub">Compact player shown in the notification drawer</div>
-            ${notificationWidget(db)}
+            <div class="card-title">Home screen widget</div>
+            <div class="card-sub">Pastel player for your launcher — colors follow your accent and canvas tint</div>
+            ${widgetPreview(db)}
+            <button class="btn-outline" style="width:100%; justify-content:center; margin-top:14px;" hx-post="/api/widget/pin" hx-swap="none">＋ Add to home screen</button>
           </div>
 
           <div class="card">
@@ -646,7 +647,7 @@ object Views {
         else body
     }
 
-    // ---------------- notification widget ----------------
+    // ---------------- home screen widget preview ----------------
 
     private val ICON_W_PREV = """<svg width="12" height="10" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>"""
     private val ICON_W_NEXT = """<svg width="12" height="10" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>"""
@@ -657,11 +658,12 @@ object Views {
         """<svg width="17" height="16" viewBox="0 0 24 22"><path d="M12 20 C-4.5 9.5 3.5 -1.5 12 5.5 C20.5 -1.5 28.5 9.5 12 20 Z" fill="none" stroke="#8a84a3" stroke-width="2"></path></svg>"""
 
     /**
-     * Standalone compact player block: cover thumb, stacked metadata, live
-     * mm:ss position, prev/play/next cluster and the favorite heart toggle.
-     * Deliberately has no progress bar. The state poller keeps the w-* ids live.
+     * In-app preview of the home screen widget: cover thumb, stacked
+     * metadata, live mm:ss position, prev/play/next cluster and the favorite
+     * heart toggle — the same pastel card WidgetRenderer draws on the
+     * launcher. The state poller keeps the w-* ids live.
      */
-    fun notificationWidget(db: MusicDatabase): String {
+    fun widgetPreview(db: MusicDatabase): String {
         val s = PlayerController.snapshot
         val hasTrack = s.trackId >= 0
         val fav = hasTrack && db.track(s.trackId)?.favorite == true

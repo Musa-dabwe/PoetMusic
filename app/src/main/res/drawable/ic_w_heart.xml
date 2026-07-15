@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Filled favourite heart, same blush pink as the in-app heart. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="22dp"
+    android:viewportWidth="24" android:viewportHeight="22">
+    <path android:fillColor="#E79AB0"
+        android:pathData="M12,21 C-6,10 3,-3 12,5 C21,-3 30,10 12,21 Z" />
+</vector>
