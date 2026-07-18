@@ -44,6 +44,10 @@ body { background: var(--bg); font-family:'Outfit', sans-serif; color: var(--ink
   /* blocks pinch and double-tap zoom while keeping scroll + tap responsive */
   touch-action: manipulation; }
 input, textarea { -webkit-user-select:text; user-select:text; }
+/* while any overlay (drawer/sheet/queue/modal) is open the page behind must
+   not scroll — overscroll-behavior on the overlay only helps once the overlay
+   itself overflows, so short drawers need the scroller frozen too */
+body.overlay-open { overflow:hidden; }
 button { font-family: inherit; color: var(--ink); }
 @keyframes poet-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes poet-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
@@ -120,7 +124,7 @@ body.select-mode #cab { display:block; }
 
 /* options drawer */
 .drawer { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
-  max-height:90vh; overflow-y:auto; z-index:71; background:#ffffff; border-radius:24px 24px 0 0;
+  max-height:90vh; overflow-y:auto; overscroll-behavior:contain; z-index:71; background:#ffffff; border-radius:24px 24px 0 0;
   box-shadow:0 -12px 40px rgba(59,54,81,0.3); padding:12px 12px calc(20px + env(safe-area-inset-bottom)) 12px;
   animation:poet-sheet-up 0.26s cubic-bezier(0.2,0.9,0.3,1); }
 .drawer-head { display:flex; align-items:center; gap:13px; padding:0 10px 14px 10px;
@@ -177,7 +181,7 @@ body.select-mode #cab { display:block; }
 
 /* centered sub-sheet modals (song info, delete confirm) */
 .center-shield { position:fixed; inset:0; z-index:72; background:rgba(59,54,81,0.4); backdrop-filter:blur(4px);
-  display:flex; align-items:center; justify-content:center; padding:28px; animation:poet-fade-in 0.15s ease; }
+  display:flex; align-items:center; justify-content:center; padding:28px; animation:poet-fade-in 0.15s ease; touch-action:none; }
 .info-card { width:100%; max-width:360px; background:#ffffff; border-radius:18px; padding:22px;
   box-shadow:0 20px 60px rgba(59,54,81,0.35); box-sizing:border-box; }
 .info-row { display:flex; justify-content:space-between; gap:16px; }
@@ -223,7 +227,7 @@ body.select-mode #cab { display:block; }
 input.seek { -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:3px; outline:none; border:none; cursor:pointer; }
 input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%; background:var(--ink); border:3px solid #ffffff; box-shadow:0 1px 4px rgba(59,54,81,0.35); }
 /* position:relative so each .lyric's offsetTop is deck-relative (auto-scroll math) */
-.lyrics-deck { position:relative; width:100%; max-width:340px; margin:16px auto 0 auto; background:rgba(255,255,255,0.7); backdrop-filter:blur(8px); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; max-height:38vh; overflow-y:auto; }
+.lyrics-deck { position:relative; width:100%; max-width:340px; margin:16px auto 0 auto; background:rgba(255,255,255,0.7); backdrop-filter:blur(8px); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; max-height:38vh; overflow-y:auto; overscroll-behavior:contain; }
 .lyric { font-size:13px; font-weight:500; color:var(--lyric-dim); transition: all 0.3s; }
 .lyric.active { font-size:16px; font-weight:700; color:var(--ink); }
 
@@ -238,11 +242,11 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .spinner { display:inline-block; width:15px; height:15px; border:2.5px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:poet-spin 0.8s linear infinite; }
 
 /* bottom sheets (sort drawer, tag editor) */
-.sheet-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); animation:poet-fade-in 0.2s ease; }
+.sheet-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); animation:poet-fade-in 0.2s ease; touch-action:none; }
 .sheet { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; z-index:71;
   background:#ffffff; border-radius:24px 24px 0 0; box-shadow:0 -12px 40px rgba(59,54,81,0.25); margin:0;
   padding:12px 20px calc(24px + env(safe-area-inset-bottom)) 20px; animation:poet-sheet-up 0.25s cubic-bezier(0.2,0.9,0.3,1); }
-.sheet-tall { max-height:88vh; overflow-y:auto; }
+.sheet-tall { max-height:88vh; overflow-y:auto; overscroll-behavior:contain; }
 .sheet-grab { width:40px; height:4px; border-radius:2px; background:rgba(59,54,81,0.15); margin:0 auto 14px auto; }
 .sheet-title { font-size:16px; font-weight:700; }
 .sheet-sub { font-size:12px; color:var(--muted); font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -297,7 +301,7 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
   background:rgba(59,54,81,0.06); color:var(--muted); transition:background 0.15s; }
 .ed-tab:active { transform:scale(0.97); }
 .ed-tab.active { background:var(--accent); color:var(--ink); }
-.ed-body { flex:1; overflow-y:auto; padding:4px 20px 20px 20px; min-height:0; }
+.ed-body { flex:1; overflow-y:auto; overscroll-behavior:contain; padding:4px 20px 20px 20px; min-height:0; }
 .ed-field { display:flex; flex-direction:column; gap:6px; }
 .ed-field span { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; }
 .ed-field input, .ed-field textarea { font-family:inherit; font-size:14px; font-weight:600; color:var(--ink); padding:12px 14px;
@@ -399,11 +403,11 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 /* queue panel */
 @keyframes queue-up { from { transform:translate(-50%,100%); } to { transform:translate(-50%,0); } }
 @keyframes queue-eq { 0%,100% { height:5px; } 50% { height:15px; } }
-.queue-shield { position:fixed; inset:0; z-index:64; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); }
+.queue-shield { position:fixed; inset:0; z-index:64; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); touch-action:none; }
 .queue-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; max-height:86vh; z-index:65;
   background:var(--bg); border-radius:22px 22px 0 0; box-shadow:0 -8px 32px rgba(59,54,81,0.25);
   padding:16px 16px calc(14px + env(safe-area-inset-bottom)) 16px; display:flex; flex-direction:column; animation: queue-up 0.22s ease-out; }
-#qp-body { overflow-y:auto; min-height:0; padding:2px 0 4px 0; }
+#qp-body { overflow-y:auto; overscroll-behavior:contain; min-height:0; padding:2px 0 4px 0; }
 .qp-hdr { display:flex; align-items:center; gap:12px; padding:0 2px 10px 2px; flex-shrink:0; }
 .qp-back { border:none; cursor:pointer; width:38px; height:38px; border-radius:12px; background:rgba(59,54,81,0.06);
   display:flex; align-items:center; justify-content:center; flex-shrink:0; }
@@ -435,7 +439,7 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .q-grab span { width:14px; height:2px; border-radius:2px; background:#cfc9de; }
 
 /* modal + toast */
-#modal-root .modal-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; padding:24px; }
+#modal-root .modal-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; padding:24px; touch-action:none; }
 .modal { background:#ffffff; border-radius:18px; padding:20px; width:100%; max-width:400px; box-shadow:0 16px 48px rgba(59,54,81,0.3); animation:poet-fade 0.15s ease-out; }
 .modal label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:12px 0 4px 0; }
 .modal input { width:100%; border:1.5px solid rgba(59,54,81,0.15); border-radius:10px; padding:10px 12px; font-family:inherit; font-size:14px; color:var(--ink); background:#fff; }
@@ -593,6 +597,20 @@ function closeQueue() {
 function closeSheet() {
   document.getElementById('sheet-root').innerHTML = '';
 }
+
+/* freeze the page scroller while any overlay root has content, so drawer
+   scrolling can never chain into the library list behind it */
+(function () {
+  var roots = ['sheet-root', 'queue-root', 'modal-root'].map(function (id) {
+    return document.getElementById(id);
+  });
+  function syncOverlayLock() {
+    var open = roots.some(function (r) { return r.firstChild !== null; });
+    document.body.classList.toggle('overlay-open', open);
+  }
+  var mo = new MutationObserver(syncOverlayLock);
+  roots.forEach(function (r) { mo.observe(r, { childList: true }); });
+})();
 
 /* keep an opened context menu fully on screen: flip upward near the bottom edge */
 function positionMenu(menu) {

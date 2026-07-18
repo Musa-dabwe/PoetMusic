@@ -164,6 +164,39 @@ Legend: 🟣 fixed · 🔁 was fixed, got reintroduced, fixed again
   the deck glides as lines advance; hand-scrolling the deck must not snap
   back until the next line change.
 
+## PR #11 — Overlay scroll chaining fix (`claude/lyrics-page-scroll-bug-uxnxnv`)
+
+### 11.1 🟣 Scrolling to the end of the options drawer moved the library behind it
+- **Symptom:** on the Library screen, opening the ⋯ options drawer and
+  scrolling to its end made the song list in the background scroll too
+  (scroll chaining / scroll bleed). Same for the sort drawer, tag-editor
+  body, queue panel, and dragging on the dim backdrop.
+- **Root cause:** the drawer and sheets are `overflow-y:auto` containers
+  layered over the scrollable page body. When a scroll gesture hits the
+  container's boundary the WebView chains the leftover momentum up to the
+  page. Drags on the shield or on a short (non-overflowing) sheet pass
+  through to the page directly, because a container that cannot scroll is
+  skipped by the scroll chain entirely.
+- **Fix (three layers):**
+  1. `overscroll-behavior:contain` on every scrollable overlay container
+     (`.drawer`, `.sheet-tall`, `.ed-body`, `#qp-body`, `.lyrics-deck`) —
+     isolates momentum at the boundary.
+  2. `touch-action:none` on the full-screen shields (`.sheet-shield`,
+     `.queue-shield`, `.center-shield`, `.modal-shield`) — backdrop drags
+     can no longer scroll the page (taps to dismiss still work).
+  3. `body.overlay-open { overflow:hidden }` toggled by a single
+     `MutationObserver` watching `#sheet-root` / `#queue-root` /
+     `#modal-root` — freezes the page scroller whenever any overlay is
+     mounted, covering short drawers that `overscroll-behavior` can't help.
+- **Do not reintroduce by:** adding a new `overflow-y:auto` overlay without
+  `overscroll-behavior:contain`, adding a new full-screen shield without
+  `touch-action:none`, or mounting overlays outside the three observed
+  roots (add the new root to the observer list in `Shell.kt` instead).
+- **How to verify:** library → ⋯ on a song → fling the drawer past its end:
+  the playlist behind must not move. Drag the dim backdrop: page stays put.
+  Open the short single-song drawer (no overflow) and drag inside it: page
+  stays put. Close the drawer: the library scrolls normally again.
+
 ---
 
 ## Design-file delta: `Poet_Music.initial.html` → `Poet_Music.dc_new.html`
@@ -191,3 +224,5 @@ real app):
 - [ ] No `hx-confirm` / `confirm(` / `alert(` in `rg` output over `server/` (3.5)
 - [ ] First launch shows the combined permission dialog (3.6)
 - [ ] Lyrics open: page never scrolls by itself; only the deck glides (10.1)
+- [ ] Drawer/sheet/queue open: background list never moves, even when
+      flinging past the overlay's end or dragging the backdrop (11.1)
