@@ -284,18 +284,16 @@ object PoetServer {
                 post("/api/player/toggle") { PlayerController.togglePlay(); noContent() }
                 post("/api/player/next") { PlayerController.next(); noContent() }
                 post("/api/player/prev") { PlayerController.previous(); noContent() }
-                /* Musicolet-style state machines: advance the mode, then answer with
-                   the button in its new state (swapped in place via hx-swap="outerHTML")
-                   so the tap gets instant feedback instead of waiting for the poller. */
+                /* Musicolet-style state machines: one serialized controller op
+                   advances the mode and returns what was actually committed; the
+                   response is the button in that state (swapped in place via
+                   hx-swap="outerHTML") so the tap gets instant feedback instead
+                   of waiting for the poller. */
                 post("/api/player/shuffle") {
-                    val next = (PlayerController.snapshot.shuffleMode + 1).mod(3)
-                    PlayerController.setShuffleMode(next)
-                    call.respondText(Views.shuffleButton(next), ContentType.Text.Html)
+                    call.respondText(Views.shuffleButton(PlayerController.advanceShuffleMode()), ContentType.Text.Html)
                 }
                 post("/api/player/repeat") {
-                    val next = PlayerController.nextRepeatCode(PlayerController.snapshot.repeatMode)
-                    PlayerController.setRepeatMode(next)
-                    call.respondText(Views.repeatButton(next), ContentType.Text.Html)
+                    call.respondText(Views.repeatButton(PlayerController.advanceRepeatMode()), ContentType.Text.Html)
                 }
                 post("/api/player/speed") { PlayerController.cycleSpeed(); noContent() }
 

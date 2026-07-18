@@ -53,23 +53,27 @@ can never disagree for more than one poll.
 - Replace `shuffleActive: Boolean` with `shuffleMode: Int` and constants
   `SHUFFLE_OFF = 0`, `SHUFFLE_SONGS = 1`, `SHUFFLE_ALBUMS = 2`.
 - `Snapshot.shuffle: Boolean` → `Snapshot.shuffleMode: Int`.
-- Replace `toggleShuffle()` with `setShuffleMode(mode)` which rewrites the
-  static queue without interrupting the current song:
+- Replace `toggleShuffle()` with `applyShuffleMode(mode)` which rewrites
+  the static queue without interrupting the current song:
   - **OFF** — restore master order around the current song (existing logic).
   - **SONGS** — current song + shuffled rest (existing logic).
   - **ALBUMS** — current song + the rest of its album in master order, then
     the remaining albums in random order, each album's tracks in master
-    order (grouped by the media items' album metadata).
-- Replace `cycleRepeat()` with `setRepeatMode(code)` plus a pure
-  `nextRepeatCode(code)` so the server can compute the next state up front
-  and render the matching fragment.
+    order. Album identity is title + album artist (so two albums sharing a
+    title stay separate), and an untagged track is its own group rather
+    than part of one giant "" pseudo-album.
+- Replace `cycleRepeat()` with `advanceRepeatMode()` /
+  `advanceShuffleMode()`: one serialized main-thread read → compute next →
+  apply → return the committed mode (same `CountDownLatch` pattern as
+  `queueItems()`), so the server can render exactly the state that was
+  committed.
 - Persistence: `pb_shuffle` stores the mode int (legacy `"1"` restores as
   Shuffle songs unchanged).
 
 **`server/PoetServer.kt`**
 - `POST /api/player/shuffle` and `POST /api/player/repeat` become state
-  machines: read the snapshot's mode → compute next → apply → respond with
-  the updated button HTML (instead of 204 No Content).
+  machines: call the controller's atomic advance op and respond with the
+  updated button HTML for the committed mode (instead of 204 No Content).
 - `/api/player/state` JSON: `"shuffle"` field carries the mode int (0/1/2).
 
 **`server/Views.kt`**
@@ -86,9 +90,11 @@ can never disagree for more than one poll.
 
 ### Race note
 
-Two taps faster than the main-thread hop could compute the same "next"
-state twice; the poller reconciles the button with the real snapshot within
-a second, so no lasting divergence is possible.
+The advance ops are serialized on the main-thread handler: each one reads
+the live mode, computes the next, applies it and returns what it committed,
+so rapid taps queue up as distinct transitions instead of collapsing into
+one. The poller still reconciles the button with the snapshot every second
+as a belt-and-braces backstop.
 
 ---
 

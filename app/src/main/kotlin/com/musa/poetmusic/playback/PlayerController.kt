@@ -327,6 +327,7 @@ object PlayerController {
                 .setTitle(t.title)
                 .setArtist(t.artist)
                 .setAlbumTitle(t.album)
+                .setAlbumArtist(t.albumArtist)
                 .setArtworkUri(Uri.parse("http://127.0.0.1:8080/api/art/${t.id}"))
                 .build()
         )
@@ -359,6 +360,42 @@ object PlayerController {
     }
 
     /**
+     * Advance shuffle to its next mode and return the committed mode. The
+     * read → compute → apply happens in one serialized main-thread hop, so
+     * two rapid taps can never read the same stale mode and collapse two
+     * transitions into one. Safe to call from server threads (same latch
+     * pattern as [queueItems]).
+     */
+    fun advanceShuffleMode(): Int {
+        var result = snapshot.shuffleMode
+        val latch = CountDownLatch(1)
+        handler.post {
+            try {
+                player?.let { p ->
+                    applyShuffleMode(p, (shuffleMode + 1).mod(3))
+                    refreshSnapshot()
+                    result = shuffleMode
+                }
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await(1, TimeUnit.SECONDS)
+        return result
+    }
+
+    /**
+     * Stable album identity for group shuffle: title + album artist, so two
+     * albums that share a title stay separate; a track with no album tag is
+     * its own group rather than part of one giant "" pseudo-album.
+     */
+    private fun albumKey(item: MediaItem): String {
+        val album = item.mediaMetadata.albumTitle?.toString().orEmpty()
+        if (album.isEmpty()) return "track:${item.mediaId}"
+        return album + "\u0000" + (item.mediaMetadata.albumArtist?.toString().orEmpty())
+    }
+
+    /**
      * Rewrite the queue for [mode] without interrupting the current song:
      *   SHUFFLE_OFF    — restore the master order around the current song;
      *                    play-next insertions that aren't part of the master
@@ -370,11 +407,11 @@ object PlayerController {
      *                    each album's tracks in master order (Musicolet's
      *                    group shuffle).
      */
-    fun setShuffleMode(mode: Int) = onMain { p ->
+    private fun applyShuffleMode(p: ExoPlayer, mode: Int) {
         val target = mode.coerceIn(SHUFFLE_OFF, SHUFFLE_ALBUMS)
-        if (target == shuffleMode) return@onMain
+        if (target == shuffleMode) return
         val count = p.mediaItemCount
-        if (count == 0) { shuffleMode = target; return@onMain }
+        if (count == 0) { shuffleMode = target; return }
         val cur = p.currentMediaItemIndex
         val items = (0 until count).map { p.getMediaItemAt(it) }
         val rank = masterIds.mapIndexed { i, id -> id.toString() to i }.toMap()
@@ -383,11 +420,10 @@ object PlayerController {
         when (target) {
             SHUFFLE_SONGS -> p.addMediaItems(items.filterIndexed { i, _ -> i != cur }.shuffled())
             SHUFFLE_ALBUMS -> {
-                fun albumOf(item: MediaItem) = item.mediaMetadata.albumTitle?.toString() ?: ""
                 val groups = items.filterIndexed { i, _ -> i != cur }
                     .sortedBy { rank[it.mediaId] ?: Int.MAX_VALUE }
-                    .groupBy(::albumOf)
-                val curAlbum = albumOf(items[cur])
+                    .groupBy(::albumKey)
+                val curAlbum = albumKey(items[cur])
                 val restAlbums = groups.keys.filter { it != curAlbum }.shuffled()
                 p.addMediaItems(groups[curAlbum].orEmpty() + restAlbums.flatMap { groups.getValue(it) })
             }
@@ -445,10 +481,28 @@ object PlayerController {
         }
     }
 
-    fun setRepeatMode(code: Int) = onMain { applyRepeatCode(it, code) }
+    /** Advance repeat to its next mode and return the committed mode; same
+     *  serialized read-modify-write as [advanceShuffleMode]. */
+    fun advanceRepeatMode(): Int {
+        var result = snapshot.repeatMode
+        val latch = CountDownLatch(1)
+        handler.post {
+            try {
+                player?.let { p ->
+                    applyRepeatCode(p, nextRepeatCode(repeatCode(p)))
+                    refreshSnapshot()
+                    result = snapshot.repeatMode
+                }
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await(1, TimeUnit.SECONDS)
+        return result
+    }
 
     /** off → repeat playlist → repeat one → play single & stop → off */
-    fun nextRepeatCode(code: Int): Int = when (code) {
+    private fun nextRepeatCode(code: Int): Int = when (code) {
         REPEAT_OFF -> REPEAT_ALL
         REPEAT_ALL -> REPEAT_ONE
         REPEAT_ONE -> REPEAT_ONE_STOP
