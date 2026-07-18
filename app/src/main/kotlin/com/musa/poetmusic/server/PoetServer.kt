@@ -208,7 +208,7 @@ object PoetServer {
                     val fav = track?.favorite == true
                     val mod = track?.lastModified ?: 0
                     val json = """{"trackId":${s.trackId},"title":${jsonStr(s.title)},"artist":${jsonStr(s.artist)},""" +
-                        """"pos":${s.positionMs},"dur":${s.durationMs},"playing":${s.playing},"shuffle":${s.shuffle},""" +
+                        """"pos":${s.positionMs},"dur":${s.durationMs},"playing":${s.playing},"shuffle":${s.shuffleMode},""" +
                         """"repeat":${s.repeatMode},"speed":${s.speed},"sleep":${s.sleepRemainingMs},"hasQueue":${s.hasQueue},"fav":$fav,"mod":$mod}"""
                     call.respondText(json, ContentType.Application.Json)
                 }
@@ -284,8 +284,19 @@ object PoetServer {
                 post("/api/player/toggle") { PlayerController.togglePlay(); noContent() }
                 post("/api/player/next") { PlayerController.next(); noContent() }
                 post("/api/player/prev") { PlayerController.previous(); noContent() }
-                post("/api/player/shuffle") { PlayerController.toggleShuffle(); noContent() }
-                post("/api/player/repeat") { PlayerController.cycleRepeat(); noContent() }
+                /* Musicolet-style state machines: advance the mode, then answer with
+                   the button in its new state (swapped in place via hx-swap="outerHTML")
+                   so the tap gets instant feedback instead of waiting for the poller. */
+                post("/api/player/shuffle") {
+                    val next = (PlayerController.snapshot.shuffleMode + 1).mod(3)
+                    PlayerController.setShuffleMode(next)
+                    call.respondText(Views.shuffleButton(next), ContentType.Text.Html)
+                }
+                post("/api/player/repeat") {
+                    val next = PlayerController.nextRepeatCode(PlayerController.snapshot.repeatMode)
+                    PlayerController.setRepeatMode(next)
+                    call.respondText(Views.repeatButton(next), ContentType.Text.Html)
+                }
                 post("/api/player/speed") { PlayerController.cycleSpeed(); noContent() }
 
                 post("/api/player/seek") {

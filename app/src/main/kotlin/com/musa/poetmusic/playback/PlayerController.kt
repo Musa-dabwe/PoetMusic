@@ -19,10 +19,15 @@ import java.util.concurrent.TimeUnit
  *
  * Queue model (Musicolet-style): the play queue is always a static, literal
  * sequence of media items — ExoPlayer's shuffle mode is never enabled.
- * [masterIds] remembers the source listing's original order; "shuffle"
- * rewrites the queue with a Fisher-Yates randomized copy, and un-shuffling
- * restores the master order around the currently playing song. "Play next"
- * inserts directly after the current item.
+ * [masterIds] remembers the source listing's original order; shuffling
+ * rewrites the queue in place, and un-shuffling restores the master order
+ * around the currently playing song. "Play next" inserts directly after
+ * the current item.
+ *
+ * Shuffle modes exposed to the UI:
+ *   0 = off (natural order)
+ *   1 = shuffle songs (Fisher-Yates over the whole queue)
+ *   2 = shuffle albums (random album order, tracks in order within each)
  *
  * Repeat modes exposed to the UI:
  *   0 = off (play queue through, then stop)
@@ -37,6 +42,10 @@ object PlayerController {
     const val REPEAT_ALL = 2
     const val REPEAT_ONE_STOP = 3
 
+    const val SHUFFLE_OFF = 0
+    const val SHUFFLE_SONGS = 1
+    const val SHUFFLE_ALBUMS = 2
+
     data class Snapshot(
         val trackId: Long = -1,
         val title: String = "Nothing playing",
@@ -44,7 +53,7 @@ object PlayerController {
         val positionMs: Long = 0,
         val durationMs: Long = 0,
         val playing: Boolean = false,
-        val shuffle: Boolean = false,
+        val shuffleMode: Int = SHUFFLE_OFF,
         val repeatMode: Int = REPEAT_OFF,
         val speed: Float = 1f,
         val hasQueue: Boolean = false,
@@ -71,8 +80,8 @@ object PlayerController {
     /** Original (unshuffled) order of the last source listing; main thread only. */
     private var masterIds: List<Long> = emptyList()
 
-    /** True while the queue holds a shuffled sequence of the master list. */
-    private var shuffleActive = false
+    /** Active shuffle mode (SHUFFLE_*); main thread only. */
+    private var shuffleMode = SHUFFLE_OFF
 
     /**
      * Invoked on the main thread after every periodic snapshot refresh.
@@ -119,7 +128,7 @@ object PlayerController {
         player = null
         snapshot = Snapshot()
         masterIds = emptyList()
-        shuffleActive = false
+        shuffleMode = SHUFFLE_OFF
         sourceName = "your library"
     }
 
@@ -141,7 +150,7 @@ object PlayerController {
             positionMs = p.currentPosition.coerceAtLeast(0),
             durationMs = if (p.duration > 0) p.duration else 0,
             playing = p.isPlaying,
-            shuffle = shuffleActive,
+            shuffleMode = shuffleMode,
             repeatMode = repeatCode(p),
             speed = p.playbackParameters.speed,
             hasQueue = p.mediaItemCount > 0,
@@ -181,7 +190,7 @@ object PlayerController {
         }
         db.setSetting("pb_index", p.currentMediaItemIndex.toString())
         db.setSetting("pb_pos", p.currentPosition.coerceAtLeast(0).toString())
-        db.setSetting("pb_shuffle", if (shuffleActive) "1" else "0")
+        db.setSetting("pb_shuffle", shuffleMode.toString())
         db.setSetting("pb_repeat", repeatCode(p).toString())
         db.setSetting("pb_speed", p.playbackParameters.speed.toString())
         db.setSetting("pb_source", sourceName)
@@ -198,7 +207,7 @@ object PlayerController {
         if (tracks.isEmpty()) return
         val index = db.getSetting("pb_index", "0").toIntOrNull()?.coerceIn(0, tracks.size - 1) ?: 0
         val pos = db.getSetting("pb_pos", "0").toLongOrNull()?.coerceAtLeast(0) ?: 0
-        val shuffle = db.getSetting("pb_shuffle", "0") == "1"
+        val shuffle = db.getSetting("pb_shuffle", "0").toIntOrNull()?.coerceIn(SHUFFLE_OFF, SHUFFLE_ALBUMS) ?: SHUFFLE_OFF
         val repeat = db.getSetting("pb_repeat", "0").toIntOrNull() ?: REPEAT_OFF
         val speed = db.getSetting("pb_speed", "1.0").toFloatOrNull() ?: 1f
         val master = db.getSetting("pb_master", "").split(',').mapNotNull { it.toLongOrNull() }
@@ -206,7 +215,7 @@ object PlayerController {
         onMain { p ->
             if (p.mediaItemCount > 0) return@onMain // something is already queued
             masterIds = master.ifEmpty { ids }
-            shuffleActive = shuffle
+            shuffleMode = shuffle
             sourceName = source
             p.shuffleModeEnabled = false
             p.setMediaItems(tracks.map(::mediaItem), index, pos)
@@ -338,7 +347,7 @@ object PlayerController {
         if (tracks.isEmpty()) return
         onMain { p ->
             masterIds = tracks.map { it.id }
-            shuffleActive = shuffled
+            shuffleMode = if (shuffled) SHUFFLE_SONGS else SHUFFLE_OFF
             sourceName = source
             val ordered = if (shuffled) tracks.shuffled() else tracks
             val start = if (shuffled) 0 else startIndex.coerceIn(0, tracks.size - 1)
@@ -350,33 +359,46 @@ object PlayerController {
     }
 
     /**
-     * Shuffle ON: rewrite the queue as [current song] + a static random
-     * sequence of everything else. Shuffle OFF: restore the master order
-     * around the current song; play-next insertions that aren't part of the
-     * master list keep their relative order at the end. Playback of the
-     * current song is never interrupted.
+     * Rewrite the queue for [mode] without interrupting the current song:
+     *   SHUFFLE_OFF    — restore the master order around the current song;
+     *                    play-next insertions that aren't part of the master
+     *                    list keep their relative order at the end.
+     *   SHUFFLE_SONGS  — [current song] + a static random sequence of
+     *                    everything else.
+     *   SHUFFLE_ALBUMS — [current song] + the rest of its album in master
+     *                    order, then the remaining albums in random order,
+     *                    each album's tracks in master order (Musicolet's
+     *                    group shuffle).
      */
-    fun toggleShuffle() = onMain { p ->
+    fun setShuffleMode(mode: Int) = onMain { p ->
+        val target = mode.coerceIn(SHUFFLE_OFF, SHUFFLE_ALBUMS)
+        if (target == shuffleMode) return@onMain
         val count = p.mediaItemCount
-        if (count == 0) { shuffleActive = !shuffleActive; return@onMain }
+        if (count == 0) { shuffleMode = target; return@onMain }
         val cur = p.currentMediaItemIndex
         val items = (0 until count).map { p.getMediaItemAt(it) }
-        if (!shuffleActive) {
-            val rest = items.filterIndexed { i, _ -> i != cur }.shuffled()
-            p.removeMediaItems(cur + 1, count)
-            p.removeMediaItems(0, cur)
-            p.addMediaItems(rest)
-            shuffleActive = true
-        } else {
-            val rank = masterIds.mapIndexed { i, id -> id.toString() to i }.toMap()
-            val target = items.sortedBy { rank[it.mediaId] ?: Int.MAX_VALUE }
-            val k = target.indexOfFirst { it === items[cur] }
-            p.removeMediaItems(cur + 1, count)
-            p.removeMediaItems(0, cur)
-            p.addMediaItems(0, target.subList(0, k))
-            p.addMediaItems(target.subList(k + 1, target.size))
-            shuffleActive = false
+        val rank = masterIds.mapIndexed { i, id -> id.toString() to i }.toMap()
+        p.removeMediaItems(cur + 1, count)
+        p.removeMediaItems(0, cur)
+        when (target) {
+            SHUFFLE_SONGS -> p.addMediaItems(items.filterIndexed { i, _ -> i != cur }.shuffled())
+            SHUFFLE_ALBUMS -> {
+                fun albumOf(item: MediaItem) = item.mediaMetadata.albumTitle?.toString() ?: ""
+                val groups = items.filterIndexed { i, _ -> i != cur }
+                    .sortedBy { rank[it.mediaId] ?: Int.MAX_VALUE }
+                    .groupBy(::albumOf)
+                val curAlbum = albumOf(items[cur])
+                val restAlbums = groups.keys.filter { it != curAlbum }.shuffled()
+                p.addMediaItems(groups[curAlbum].orEmpty() + restAlbums.flatMap { groups.getValue(it) })
+            }
+            else -> {
+                val master = items.sortedBy { rank[it.mediaId] ?: Int.MAX_VALUE }
+                val k = master.indexOfFirst { it === items[cur] }
+                p.addMediaItems(0, master.subList(0, k))
+                p.addMediaItems(master.subList(k + 1, master.size))
+            }
         }
+        shuffleMode = target
     }
 
     fun playNext(track: Track) = onMain { p ->
@@ -423,15 +445,14 @@ object PlayerController {
         }
     }
 
+    fun setRepeatMode(code: Int) = onMain { applyRepeatCode(it, code) }
+
     /** off → repeat playlist → repeat one → play single & stop → off */
-    fun cycleRepeat() = onMain { p ->
-        val next = when (repeatCode(p)) {
-            REPEAT_OFF -> REPEAT_ALL
-            REPEAT_ALL -> REPEAT_ONE
-            REPEAT_ONE -> REPEAT_ONE_STOP
-            else -> REPEAT_OFF
-        }
-        applyRepeatCode(p, next)
+    fun nextRepeatCode(code: Int): Int = when (code) {
+        REPEAT_OFF -> REPEAT_ALL
+        REPEAT_ALL -> REPEAT_ONE
+        REPEAT_ONE -> REPEAT_ONE_STOP
+        else -> REPEAT_OFF
     }
 
     fun cycleSpeed() = onMain { p ->
