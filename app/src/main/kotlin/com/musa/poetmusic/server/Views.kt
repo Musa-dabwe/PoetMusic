@@ -735,11 +735,37 @@ object Views {
 
     // ---------------- now playing ----------------
 
-    /** Shuffle button icon: crossed arrows when shuffling, ordered list when playing in order. */
-    fun shuffleIcon(on: Boolean): String = if (on)
-        """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>"""
-    else
-        """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line><polyline points="16 15 19 18 16 21"></polyline></svg>"""
+    /** Shuffle button icon for the three modes (see PlayerController shuffle codes):
+     *  ordered list when off, crossed arrows for shuffle songs, arrows + disc badge for shuffle albums. */
+    fun shuffleIcon(mode: Int): String = when (mode) {
+        1 -> // shuffle songs
+            """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>"""
+        2 -> // shuffle albums (group shuffle): arrows shortened to fit a vinyl-disc badge
+            """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="11" y1="13" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><circle cx="5.5" cy="18.5" r="4"></circle><circle cx="5.5" cy="18.5" r="0.6" fill="currentColor"></circle></svg>"""
+        else -> // off: play in order
+            """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line><polyline points="16 15 19 18 16 21"></polyline></svg>"""
+    }
+
+    fun shuffleTitle(mode: Int): String = when (mode) {
+        1 -> "Shuffle songs"
+        2 -> "Shuffle albums"
+        else -> "Play in order"
+    }
+
+    fun repeatTitle(mode: Int): String = when (mode) {
+        1 -> "Repeat one song"
+        2 -> "Repeat playlist"
+        3 -> "Play single song and stop"
+        else -> "Play queue through"
+    }
+
+    /** Musicolet-style cycling buttons: each tap POSTs and the server answers with
+     *  the button already in its next state, swapped in place via outerHTML. */
+    fun shuffleButton(mode: Int): String =
+        """<button id="np-shuffle" class="np-dot${if (mode != 0) " on" else ""}" title="${shuffleTitle(mode)}" hx-post="/api/player/shuffle" hx-swap="outerHTML">${shuffleIcon(mode)}</button>"""
+
+    fun repeatButton(mode: Int): String =
+        """<button id="np-repeat" class="np-dot${if (mode != 0) " on" else ""}" title="${repeatTitle(mode)}" hx-post="/api/player/repeat" hx-swap="outerHTML">${repeatIcon(mode)}</button>"""
 
     /** Repeat button icon for the four playback modes (see PlayerController repeat codes). */
     fun repeatIcon(mode: Int): String = when (mode) {
@@ -792,7 +818,7 @@ object Views {
             </div>
 
             <div style="display:flex; align-items:center; gap:18px; margin-top:18px;">
-              <button id="np-shuffle" class="np-dot${if (s.shuffle) " on" else ""}" title="${if (s.shuffle) "Shuffle all" else "Play in order"}" hx-post="/api/player/shuffle" hx-swap="none">${shuffleIcon(s.shuffle)}</button>
+              ${shuffleButton(s.shuffleMode)}
               <button class="np-side" hx-post="/api/player/prev" hx-swap="none">
                 <svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>
               </button>
@@ -800,7 +826,7 @@ object Views {
               <button class="np-side" hx-post="/api/player/next" hx-swap="none">
                 <svg width="18" height="14" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>
               </button>
-              <button id="np-repeat" class="np-dot${if (s.repeatMode != 0) " on" else ""}" hx-post="/api/player/repeat" hx-swap="none">${repeatIcon(s.repeatMode)}</button>
+              ${repeatButton(s.repeatMode)}
             </div>
 
             <div style="display:flex; align-items:center; gap:8px; margin-top:22px; flex-wrap:wrap; justify-content:center;">

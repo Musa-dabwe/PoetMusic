@@ -222,7 +222,8 @@ body.select-mode #cab { display:block; }
 .chip.on { background: var(--accent-soft); }
 input.seek { -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:3px; outline:none; border:none; cursor:pointer; }
 input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%; background:var(--ink); border:3px solid #ffffff; box-shadow:0 1px 4px rgba(59,54,81,0.35); }
-.lyrics-deck { width:100%; max-width:340px; margin:16px auto 0 auto; background:rgba(255,255,255,0.7); backdrop-filter:blur(8px); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; max-height:38vh; overflow-y:auto; }
+/* position:relative so each .lyric's offsetTop is deck-relative (auto-scroll math) */
+.lyrics-deck { position:relative; width:100%; max-width:340px; margin:16px auto 0 auto; background:rgba(255,255,255,0.7); backdrop-filter:blur(8px); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; max-height:38vh; overflow-y:auto; }
 .lyric { font-size:13px; font-weight:500; color:var(--lyric-dim); transition: all 0.3s; }
 .lyric.active { font-size:16px; font-weight:700; color:var(--ink); }
 
@@ -533,9 +534,13 @@ var ICON_PAUSE_W = '<div style="display:flex; gap:3px;"><div style="width:3px; h
 var ICON_HEART_ON = '<svg width="17" height="16" viewBox="0 0 24 22" style="animation:poet-pop 0.3s ease;"><path d="M12 21 C-6 10 3 -3 12 5 C21 -3 30 10 12 21 Z" fill="#e79ab0"></path></svg>';
 var ICON_HEART_OFF = '<svg width="17" height="16" viewBox="0 0 24 22"><path d="M12 20 C-4.5 9.5 3.5 -1.5 12 5.5 C20.5 -1.5 28.5 9.5 12 20 Z" fill="none" stroke="#8a84a3" stroke-width="2"></path></svg>';
 
-/* shuffle button: crossed arrows = shuffle all, ordered list = play in order */
-var ICON_SHUFFLE_ON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>';
-var ICON_SHUFFLE_OFF = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line><polyline points="16 15 19 18 16 21"></polyline></svg>';
+/* shuffle button, indexed by mode: 0 play in order, 1 shuffle songs, 2 shuffle albums */
+var ICON_SHUFFLE = [
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line><polyline points="16 15 19 18 16 21"></polyline></svg>',
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>',
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="11" y1="13" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><circle cx="5.5" cy="18.5" r="4"></circle><circle cx="5.5" cy="18.5" r="0.6" fill="currentColor"></circle></svg>'
+];
+var SHUFFLE_TITLES = ['Play in order', 'Shuffle songs', 'Shuffle albums'];
 /* repeat button, indexed by mode: 0 off, 1 repeat one, 2 repeat playlist, 3 play single & stop */
 var ICON_REPEAT = [
   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="19" y2="12"></line><polyline points="13 6 19 12 13 18"></polyline></svg>',
@@ -896,9 +901,9 @@ function applyState(s) {
     if (play) play.innerHTML = s.playing ? ICON_PAUSE_LG : ICON_PLAY_LG;
     var sh = document.getElementById('np-shuffle');
     if (sh) {
-      sh.classList.toggle('on', s.shuffle);
-      var shIcon = s.shuffle ? ICON_SHUFFLE_ON : ICON_SHUFFLE_OFF;
-      if (sh._icon !== shIcon) { sh._icon = shIcon; sh.innerHTML = shIcon; sh.title = s.shuffle ? 'Shuffle all' : 'Play in order'; }
+      sh.classList.toggle('on', s.shuffle !== 0);
+      var shIcon = ICON_SHUFFLE[s.shuffle] || ICON_SHUFFLE[0];
+      if (sh._icon !== shIcon) { sh._icon = shIcon; sh.innerHTML = shIcon; sh.title = SHUFFLE_TITLES[s.shuffle] || SHUFFLE_TITLES[0]; }
     }
     var rp = document.getElementById('np-repeat');
     if (rp) {
@@ -919,7 +924,14 @@ function applyState(s) {
         if (Number(l.getAttribute('data-at')) <= s.pos) active = l;
       });
       lines.forEach(function (l) { l.classList.toggle('active', l === active); });
-      if (active && !poetSeeking) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      /* Centre the active line by scrolling ONLY the deck box, and only when
+         the line changes. scrollIntoView walked every scrollable ancestor —
+         it yanked the whole page toward the deck once per second. */
+      var box = deck.querySelector('.lyrics-deck');
+      if (box && active && !poetSeeking && box._active !== active) {
+        box._active = active;
+        box.scrollTo({ top: active.offsetTop - (box.clientHeight - active.offsetHeight) / 2, behavior: 'smooth' });
+      }
     }
   }
 }

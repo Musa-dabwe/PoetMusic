@@ -142,6 +142,28 @@ Legend: 🟣 fixed · 🔁 was fixed, got reintroduced, fixed again
   `READ_EXTERNAL_STORAGE` below (manifest-declared with `maxSdkVersion=32`).
   SAF folder grants remain the source of truth for library scanning.
 
+## PR #10 — Musicolet player controls & lyrics scroll fix (`claude/ui-improvements-scrolling-bug-eand9v`)
+
+### 10.1 🟣 Lyrics auto-scroll dragged the whole page along
+- **Symptom:** with the lyrics deck open on Now Playing, the entire screen
+  jerked/scrolled by itself once per second while a track played; manual
+  scrolling was fought and undone on the next tick.
+- **Root cause:** the poller centred the active lyric with
+  `active.scrollIntoView({block:'center', behavior:'smooth'})`.
+  `scrollIntoView` scrolls **every scrollable ancestor** — the deck *and*
+  the document — and it was re-issued every poll even when the active line
+  hadn't changed.
+- **Fix:** scroll only the deck via `box.scrollTo(...)` (`.lyrics-deck` is
+  now `position:relative` so `.lyric` offsets are deck-relative), and only
+  when the active line actually changes (`box._active` guard).
+- **Do not reintroduce by:** calling `scrollIntoView` (any options) on
+  elements inside an `overflow-y:auto` box that lives in a scrollable page —
+  always scroll the owning container with `scrollTo`/`scrollTop`.
+- **How to verify:** play a track with synced lyrics, open the deck, scroll
+  the page so the deck is half visible: the page must stay put while only
+  the deck glides as lines advance; hand-scrolling the deck must not snap
+  back until the next line change.
+
 ---
 
 ## Design-file delta: `Poet_Music.initial.html` → `Poet_Music.dc_new.html`
@@ -168,3 +190,4 @@ real app):
 - [ ] Minimize + screen off: playback continues (3.4)
 - [ ] No `hx-confirm` / `confirm(` / `alert(` in `rg` output over `server/` (3.5)
 - [ ] First launch shows the combined permission dialog (3.6)
+- [ ] Lyrics open: page never scrolls by itself; only the deck glides (10.1)
