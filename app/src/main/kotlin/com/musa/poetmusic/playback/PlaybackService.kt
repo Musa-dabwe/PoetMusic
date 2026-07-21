@@ -1,5 +1,6 @@
 package com.musa.poetmusic.playback
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import androidx.media3.common.AudioAttributes
@@ -16,6 +17,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.musa.poetmusic.MainActivity
 import com.musa.poetmusic.PoetApp
 import com.musa.poetmusic.R
 import com.musa.poetmusic.widget.WidgetRenderer
@@ -76,6 +78,15 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, player)
             .setCallback(PoetSessionCallback())
             .setMediaButtonPreferences(listOf(favouriteButton(false)))
+            // Tapping the notification body / lockscreen player opens the app.
+            // MainActivity is singleTask, so this surfaces the existing task.
+            .setSessionActivity(
+                PendingIntent.getActivity(
+                    this, 0,
+                    Intent(this, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
             .build()
         PlayerController.attach(player)
         // Bring back the previous session's queue, position and playback modes.
@@ -166,6 +177,26 @@ class PlaybackService : MediaSessionService() {
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             return super.onCustomCommand(session, controller, customCommand, args)
+        }
+
+        /**
+         * System playback resumption: after the process died (or the device
+         * rebooted), the media resumption notification / a Bluetooth play
+         * button asks us for something to play. Hand back the persisted queue
+         * at its saved position. The db read is a few key/value rows — cheap
+         * enough to answer inline, same as restoreState in onCreate.
+         */
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val db = (application as? PoetApp)?.db
+                ?: return super.onPlaybackResumption(mediaSession, controller)
+            val saved = PlayerController.persistedQueue(db)
+                ?: return super.onPlaybackResumption(mediaSession, controller)
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(saved.items, saved.index, saved.positionMs)
+            )
         }
     }
 }

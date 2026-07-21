@@ -196,17 +196,30 @@ object PlayerController {
         db.setSetting("pb_source", sourceName)
     }
 
-    /** Restore the last session's queue (in its exact play order, including the
-     *  active shuffle sequence), position and modes (paused). */
-    fun restoreState(db: MusicDatabase) {
-        bindStore(db)
+    /** The last persisted queue rebuilt as media items, plus its resume point. */
+    data class PersistedQueue(val items: List<MediaItem>, val index: Int, val positionMs: Long)
+
+    /**
+     * Rebuild the persisted queue (in its exact play order, including the
+     * active shuffle sequence). Shared by [restoreState] and the session's
+     * playback-resumption callback, which must hand the system the queue on
+     * demand after the process was killed.
+     */
+    fun persistedQueue(db: MusicDatabase): PersistedQueue? {
         val ids = db.getSetting("pb_queue", "")
             .split(',').mapNotNull { it.toLongOrNull() }
-        if (ids.isEmpty()) return
+        if (ids.isEmpty()) return null
         val tracks = db.tracksByIds(ids)
-        if (tracks.isEmpty()) return
+        if (tracks.isEmpty()) return null
         val index = db.getSetting("pb_index", "0").toIntOrNull()?.coerceIn(0, tracks.size - 1) ?: 0
         val pos = db.getSetting("pb_pos", "0").toLongOrNull()?.coerceAtLeast(0) ?: 0
+        return PersistedQueue(tracks.map(::mediaItem), index, pos)
+    }
+
+    /** Restore the last session's queue, position and modes (paused). */
+    fun restoreState(db: MusicDatabase) {
+        bindStore(db)
+        val saved = persistedQueue(db) ?: return
         val shuffle = db.getSetting("pb_shuffle", "0").toIntOrNull()?.coerceIn(SHUFFLE_OFF, SHUFFLE_ALBUMS) ?: SHUFFLE_OFF
         val repeat = db.getSetting("pb_repeat", "0").toIntOrNull() ?: REPEAT_OFF
         val speed = db.getSetting("pb_speed", "1.0").toFloatOrNull() ?: 1f
@@ -214,11 +227,11 @@ object PlayerController {
         val source = db.getSetting("pb_source", "your library")
         onMain { p ->
             if (p.mediaItemCount > 0) return@onMain // something is already queued
-            masterIds = master.ifEmpty { ids }
+            masterIds = master.ifEmpty { saved.items.mapNotNull { it.mediaId.toLongOrNull() } }
             shuffleMode = shuffle
             sourceName = source
             p.shuffleModeEnabled = false
-            p.setMediaItems(tracks.map(::mediaItem), index, pos)
+            p.setMediaItems(saved.items, saved.index, saved.positionMs)
             applyRepeatCode(p, repeat)
             p.setPlaybackSpeed(speed.coerceIn(0.25f, 4f))
             p.prepare()
