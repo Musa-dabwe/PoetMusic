@@ -88,6 +88,16 @@ class PlaybackService : MediaSessionService() {
                 )
             )
             .build()
+            .also {
+                // The UI and widget drive the ExoPlayer directly through
+                // PlayerController and never connect a MediaController, so the
+                // implicit onBind → onGetSession → addSession path never runs.
+                // The session must be added explicitly: addSession is what
+                // creates the service's internal media-notification controller,
+                // without which the media notification is never posted and the
+                // service is never promoted to foreground when playback starts.
+                addSession(it)
+            }
         PlayerController.attach(player)
         // Bring back the previous session's queue, position and playback modes.
         (application as? PoetApp)?.let { PlayerController.restoreState(it.db) }
