@@ -43,6 +43,17 @@
                 android:resource="@xml/poet_widget_info" />
         </receiver>
 
+        <!-- Revives the session after process death / reboot when a media
+             button (headset, Bluetooth, resumption notification) is pressed;
+             onPlaybackResumption then rebuilds the persisted queue. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"
