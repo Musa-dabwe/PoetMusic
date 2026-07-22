@@ -81,7 +81,8 @@ object PoetServer {
                 get("/") {
                     val accent = db.getSetting("accent", "#b9a5ec")
                     val theme = db.getSetting("theme", "Lavender")
-                    call.respondText(Shell.page(accent, theme, db.folders().size), ContentType.Text.Html)
+                    val dark = db.getSetting("dark", "0") == "1"
+                    call.respondText(Shell.page(accent, theme, db.folders().size, dark), ContentType.Text.Html)
                 }
 
                 get("/assets/{name}") {
@@ -123,6 +124,10 @@ object PoetServer {
                 get("/screens/settings") {
                     val tip = call.request.queryParameters["tip"] == "1"
                     call.respondText(Views.settingsScreen(db, tip), ContentType.Text.Html)
+                }
+
+                get("/screens/about") {
+                    call.respondText(Views.aboutScreen(db), ContentType.Text.Html)
                 }
 
                 get("/screens/album") {
@@ -557,6 +562,12 @@ object PoetServer {
                         db.setSetting("theme", name)
                         WidgetRenderer.pushUpdate(app)
                     }
+                    noContent()
+                }
+
+                post("/api/settings/dark") {
+                    val on = call.receiveParameters()["on"] == "1"
+                    db.setSetting("dark", if (on) "1" else "0")
                     noContent()
                 }
 
