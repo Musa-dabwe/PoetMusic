@@ -233,7 +233,7 @@ object Views {
         </div>
         <form style="display:flex; gap:8px; margin-top:16px;" hx-post="/api/playlist/create" hx-swap="none" hx-on::after-request="this.reset()">
           <input name="name" placeholder="New playlist name" required
-                 style="flex:1; min-width:0; border:none; border-radius:12px; padding:10px 14px; font-family:inherit; font-size:14px; color:var(--ink); background:rgba(59,54,81,0.06);">
+                 style="flex:1; min-width:0; border:none; border-radius:12px; padding:10px 14px; font-family:inherit; font-size:14px; color:var(--ink); background:var(--overlay-neutral);">
           <button type="submit" class="btn-primary">＋ Create</button>
         </form>"""
     }
@@ -802,7 +802,7 @@ object Views {
         <div class="screen" id="np-root" data-track-id="${s.trackId}">
           <button class="backlink" hx-get="/screens/library" hx-target="#main-container">← Library</button>
           <div style="display:flex; flex-direction:column; align-items:center;">
-            <div class="np-art" style="background:repeating-linear-gradient(45deg, $artBg, $artBg 14px, #ffffff 14px, #ffffff 28px);">
+            <div class="np-art" style="background:repeating-linear-gradient(45deg, $artBg, $artBg 14px, var(--card-bg) 14px, var(--card-bg) 28px);">
               ${if (track?.hasArt == true) """<img src="/api/art/${s.trackId}?v=${track.lastModified}" alt="album art">""" else ""}
             </div>
             <div id="np-title" style="font-size:22px; font-weight:700; letter-spacing:-0.02em; text-align:center;">${esc(s.title)}</div>
@@ -810,7 +810,7 @@ object Views {
 
             <div style="width:100%; max-width:340px;">
               <input id="np-slider" class="seek" type="range" min="0" max="$durSec" value="$posSec"
-                     style="background:linear-gradient(to right, var(--accent) $pct%, rgba(59,54,81,0.12) $pct%);"
+                     style="background:linear-gradient(to right, var(--accent) $pct%, var(--track-empty) $pct%);"
                      oninput="sliderInput(this)" onchange="sliderDone(this)">
               <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; margin-top:4px;">
                 <span id="np-cur">${fmtTime(s.positionMs)}</span><span id="np-tot">${fmtTime(s.durationMs)}</span>
@@ -986,13 +986,14 @@ object Views {
               <div class="tip-body">
                 <div style="font-size:14px; font-weight:700; margin-bottom:4px;">Start here</div>
                 <div style="font-size:13px; line-height:1.45; color:rgba(245,243,250,0.85);">Add a folder so Poet can find your music. You can add more anytime.</div>
-                <button onclick="dismissTip()" style="border:none; cursor:pointer; font-family:inherit; margin-top:12px; padding:8px 14px; border-radius:99px; background:var(--accent); color:var(--ink); font-size:13px; font-weight:700;">Got it, don't show again</button>
+                <button onclick="dismissTip()" style="border:none; cursor:pointer; font-family:inherit; margin-top:12px; padding:8px 14px; border-radius:99px; background:var(--accent); color:#3b3651; font-size:13px; font-weight:700;">Got it, don't show again</button>
               </div>
             </div>""" else ""
         val shield = if (showTip) """<div id="tip-shield" onclick="dismissTip()"></div>""" else ""
 
         val accent = db.getSetting("accent", "#b9a5ec")
         val theme = db.getSetting("theme", "Lavender")
+        val dark = db.getSetting("dark", "0") == "1"
         val swatches = Shell.ACCENTS.joinToString("") { c ->
             """<button class="swatch${if (c == accent) " on" else ""}" data-c="$c" style="background:$c;" onclick="setAccent('$c')"></button>"""
         }
@@ -1021,27 +1022,109 @@ object Views {
           </div>
 
           <div class="card">
-            <div class="card-title">Home screen widget</div>
-            <div class="card-sub">Pastel player for your launcher — colors follow your accent and canvas tint</div>
-            ${widgetPreview(db)}
-            <button class="btn-outline" style="width:100%; justify-content:center; margin-top:14px;" hx-post="/api/widget/pin" hx-swap="none">＋ Add to home screen</button>
+            <div class="card-title" style="margin-bottom:4px;">Appearance</div>
+            <div class="card-sub">Switch between the light and dark colour set</div>
+            <div style="display:flex; gap:8px;">
+              <button class="theme-opt${if (!dark) " on" else ""}" data-dark="0" onclick="setDark(false)">
+                <span style="font-size:15px;">☀</span> Light
+              </button>
+              <button class="theme-opt${if (dark) " on" else ""}" data-dark="1" onclick="setDark(true)">
+                <span style="font-size:15px;">☾</span> Dark
+              </button>
+            </div>
           </div>
 
           <div class="card">
             <div class="card-title" style="margin-bottom:12px;">Accent color</div>
             <div style="display:flex; gap:12px; margin-bottom:18px;">$swatches</div>
             <div class="card-title" style="margin-bottom:12px;">Canvas tint</div>
+            <div class="card-sub">Used in light mode</div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">$tints</div>
           </div>
 
-          <div class="card">
-            <div class="card-title">About</div>
-            <div style="font-size:12px; color:var(--muted); line-height:1.6;">
-              Poet Music 1.0 — offline-first pastel player.<br>
-              ${db.trackCount()} tracks · ${folders.size} folders mapped.<br>
-              Long-press any song for quick actions; MP3 tags are editable in place.
+          <div class="card" style="cursor:pointer;" hx-get="/screens/about" hx-target="#main-container">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+              <div style="min-width:0;">
+                <div class="card-title" style="margin-bottom:2px;">About Poet Music</div>
+                <div class="card-sub" style="margin-bottom:0;">Version, tech stack, license &amp; developer</div>
+              </div>
+              <span style="color:var(--faint); font-size:20px; flex-shrink:0;">›</span>
             </div>
           </div>
+        </div>"""
+    }
+
+    // ---------------- about ----------------
+
+    /**
+     * The About screen shown from Settings, built from the project's README,
+     * license, security policy, tech stack and developer info and rendered
+     * through the in-app [Markdown] renderer so it follows the active theme.
+     */
+    fun aboutScreen(db: MusicDatabase): String {
+        val trackCount = db.trackCount()
+        val folderCount = db.folders().size
+        val md = """
+# Poet Music
+
+**Version 1.0** · offline-first, pastel-themed music player for Android.
+
+Your library holds **$trackCount ${if (trackCount == 1) "track" else "tracks"}** across **$folderCount ${if (folderCount == 1) "folder" else "folders"}**.
+
+Poet Music is an offline-first music player. The UI is an [htmx](https://htmx.org) single-page app served by an embedded [Ktor](https://ktor.io) server running inside the app process and rendered in a native WebView. Playback is handled natively by Media3 / ExoPlayer through a foreground `MediaSessionService`, so music keeps playing with the screen off and shows lockscreen / notification controls.
+
+## Features
+
+- **Local library** — pick any folder with the system file picker; Poet scans it for audio and reads tags, album art and `.lrc` lyric files.
+- **Now Playing** — seek bar, playback speed, sleep timer, synced lyrics, favourites and a slide-up queue panel.
+- **Musicolet-style queue** — playlists are fixed reference lists; the queue is a temporary working copy with static shuffle, per-song remove and drag-to-reorder.
+- **Tag editor** — edit ID3v2 details, embed artwork and build synced `.lrc` files, written straight into MP3 files.
+- **Theming** — pastel accent colours, canvas tints and a full dark mode.
+
+## Tech stack
+
+- **Language** — Kotlin
+- **UI** — htmx single-page app in a native WebView
+- **Server** — embedded Ktor (CIO) bound to `127.0.0.1:8080`
+- **Playback** — Media3 / ExoPlayer in a foreground `MediaSessionService`
+- **Storage** — SQLite (tracks, folders, playlists, settings)
+- **Minimum Android** — 8.0 (API 26)
+
+## Architecture
+
+- `server/` — Ktor routes, the page shell + client JS, and server-rendered views.
+- `playback/` — the foreground Media3 session and a thread-safe player bridge.
+- `data/` — the SQLite database, library scanner, LRC parser and MP3 tag editor.
+
+The embedded server binds to `127.0.0.1` only and is never reachable from other devices on the network.
+
+## Security & privacy
+
+- **Local-only server** — the Ktor server binds exclusively to `127.0.0.1:8080`; it is not reachable from other devices.
+- **No network calls** — the app makes no outbound requests, collects no analytics and transmits no user data.
+- **Scoped storage** — folders are accessed through the Storage Access Framework with user-granted permissions only.
+- **Escaped output** — all user- and file-derived strings are escaped before rendering to prevent markup injection.
+
+To report a vulnerability, open a [GitHub security advisory](https://github.com/Musa-dabwe/PoetMusic/security/advisories/new) or an issue with the `security` label.
+
+## Developer
+
+Built by **Musa-dabwe** (Fackson Musadabwe Mutetesha).
+
+- **GitHub** — [Musa-dabwe](https://github.com/Musa-dabwe)
+- **Repository** — [Musa-dabwe/PoetMusic](https://github.com/Musa-dabwe/PoetMusic)
+
+## License
+
+Licensed under the **Apache License 2.0**.
+
+Copyright © 2026 Fackson Musadabwe Mutetesha. Licensed under the Apache License, Version 2.0; you may not use this software except in compliance with the License. The software is distributed on an "AS IS" basis, without warranties or conditions of any kind.
+""".trimIndent()
+
+        return """
+        <div class="screen" data-screen="about">
+          <button class="backlink" hx-get="/screens/settings" hx-target="#main-container">← Settings</button>
+          <div class="card">${Markdown.render(md)}</div>
         </div>"""
     }
 
@@ -1063,43 +1146,5 @@ object Views {
         return if (scanning)
             """<div hx-get="/partial/scan" hx-trigger="every 2s" hx-target="#scan-card" hx-swap="innerHTML">$body</div>"""
         else body
-    }
-
-    // ---------------- home screen widget preview ----------------
-
-    private val ICON_W_PREV = """<svg width="12" height="10" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>"""
-    private val ICON_W_NEXT = """<svg width="12" height="10" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>"""
-
-    fun heartIcon(fav: Boolean): String = if (fav)
-        """<svg width="17" height="16" viewBox="0 0 24 22" style="animation:poet-pop 0.3s ease;"><path d="M12 21 C-6 10 3 -3 12 5 C21 -3 30 10 12 21 Z" fill="#e79ab0"></path></svg>"""
-    else
-        """<svg width="17" height="16" viewBox="0 0 24 22"><path d="M12 20 C-4.5 9.5 3.5 -1.5 12 5.5 C20.5 -1.5 28.5 9.5 12 20 Z" fill="none" stroke="#8a84a3" stroke-width="2"></path></svg>"""
-
-    /**
-     * In-app preview of the home screen widget: cover thumb, stacked
-     * metadata, live mm:ss position, prev/play/next cluster and the favorite
-     * heart toggle — the same pastel card WidgetRenderer draws on the
-     * launcher. The state poller keeps the w-* ids live.
-     */
-    fun widgetPreview(db: MusicDatabase): String {
-        val s = PlayerController.snapshot
-        val hasTrack = s.trackId >= 0
-        val fav = hasTrack && db.track(s.trackId)?.favorite == true
-        val art = if (hasTrack) """<img src="/api/art/${s.trackId}" alt="">""" else "♪"
-        return """
-        <div class="widget">
-          <div class="widget-art" id="w-art" data-track-id="${s.trackId}">$art</div>
-          <div class="widget-meta">
-            <div class="widget-title" id="w-title">${esc(s.title)}</div>
-            <div class="widget-artist" id="w-artist">${esc(s.artist)}</div>
-          </div>
-          <div class="widget-time" id="w-time">${fmtClock(s.positionMs)}</div>
-          <div class="widget-controls">
-            <button class="widget-btn" hx-post="/api/player/prev" hx-swap="none" aria-label="Previous">$ICON_W_PREV</button>
-            <button class="widget-play" id="w-play" hx-post="/api/player/toggle" hx-swap="none" aria-label="Play or pause"></button>
-            <button class="widget-btn" hx-post="/api/player/next" hx-swap="none" aria-label="Next">$ICON_W_NEXT</button>
-            <button class="widget-btn" id="w-fav" hx-post="/api/player/favourite" hx-swap="none" aria-label="Favorite">${heartIcon(fav)}</button>
-          </div>
-        </div>"""
     }
 }

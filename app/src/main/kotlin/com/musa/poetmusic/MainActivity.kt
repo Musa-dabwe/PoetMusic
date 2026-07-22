@@ -112,8 +112,15 @@ class MainActivity : AppCompatActivity() {
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                // Keep navigation inside the embedded server.
-                return request.url.host != "127.0.0.1"
+                // Keep in-app navigation inside the embedded server; hand any
+                // external http(s) link (e.g. the About screen's GitHub links)
+                // to the system browser instead of loading it in the WebView.
+                val url = request.url
+                if (url.host == "127.0.0.1") return false
+                if (url.scheme == "http" || url.scheme == "https") {
+                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
+                }
+                return true
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
