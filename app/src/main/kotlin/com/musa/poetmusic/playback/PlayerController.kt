@@ -3,6 +3,7 @@ package com.musa.poetmusic.playback
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -271,27 +272,19 @@ object PlayerController {
      */
     fun queueItems(): List<QueueItem> {
         val p = player ?: return emptyList()
-        val out = ArrayList<QueueItem>()
-        val latch = CountDownLatch(1)
-        handler.post {
-            try {
-                val current = p.currentMediaItemIndex
-                for (i in 0 until p.mediaItemCount) {
-                    val item = p.getMediaItemAt(i)
-                    out += QueueItem(
-                        index = i,
-                        trackId = item.mediaId.toLongOrNull() ?: -1,
-                        title = item.mediaMetadata.title?.toString() ?: "Unknown",
-                        artist = item.mediaMetadata.artist?.toString() ?: "",
-                        current = i == current
-                    )
-                }
-            } finally {
-                latch.countDown()
+        return onMainBlocking(emptyList()) {
+            val current = p.currentMediaItemIndex
+            (0 until p.mediaItemCount).map { i ->
+                val item = p.getMediaItemAt(i)
+                QueueItem(
+                    index = i,
+                    trackId = item.mediaId.toLongOrNull() ?: -1,
+                    title = item.mediaMetadata.title?.toString() ?: "Unknown",
+                    artist = item.mediaMetadata.artist?.toString() ?: "",
+                    current = i == current
+                )
             }
         }
-        latch.await(1, TimeUnit.SECONDS)
-        return out
     }
 
     /**
@@ -372,6 +365,30 @@ object PlayerController {
         }
     }
 
+    /**
+     * Run [block] on the main thread and block the calling (server) thread
+     * until it completes, up to a 1 s deadline. The handler is FIFO, so the
+     * block always observes the effect of any mutation posted before it. A
+     * missed deadline is logged and [fallback] returned, so a stalled main
+     * thread can never hang a Ktor worker.
+     */
+    private fun <T> onMainBlocking(fallback: T, block: () -> T): T {
+        var result = fallback
+        val latch = CountDownLatch(1)
+        handler.post {
+            try {
+                result = block()
+            } finally {
+                latch.countDown()
+            }
+        }
+        if (!latch.await(1, TimeUnit.SECONDS)) {
+            Log.w("PlayerController", "onMainBlocking timed out; returning fallback state")
+            return fallback
+        }
+        return result
+    }
+
     private fun mediaItem(t: Track): MediaItem = MediaItem.Builder()
         .setUri(Uri.parse(t.uri))
         .setMediaId(t.id.toString())
@@ -416,25 +433,15 @@ object PlayerController {
      * Advance shuffle to its next mode and return the committed mode. The
      * read → compute → apply happens in one serialized main-thread hop, so
      * two rapid taps can never read the same stale mode and collapse two
-     * transitions into one. Safe to call from server threads (same latch
-     * pattern as [queueItems]).
+     * transitions into one. Safe to call from server threads (blocks via
+     * [onMainBlocking], same as [queueItems]).
      */
-    fun advanceShuffleMode(): Int {
-        var result = snapshot.shuffleMode
-        val latch = CountDownLatch(1)
-        handler.post {
-            try {
-                player?.let { p ->
-                    applyShuffleMode(p, (shuffleMode + 1).mod(2))
-                    refreshSnapshot()
-                    result = shuffleMode
-                }
-            } finally {
-                latch.countDown()
-            }
-        }
-        latch.await(1, TimeUnit.SECONDS)
-        return result
+    fun advanceShuffleMode(): Int = onMainBlocking(snapshot.shuffleMode) {
+        player?.let { p ->
+            applyShuffleMode(p, (shuffleMode + 1).mod(2))
+            refreshSnapshot()
+            shuffleMode
+        } ?: snapshot.shuffleMode
     }
 
     /**
@@ -514,22 +521,12 @@ object PlayerController {
 
     /** Advance repeat to its next mode and return the committed mode; same
      *  serialized read-modify-write as [advanceShuffleMode]. */
-    fun advanceRepeatMode(): Int {
-        var result = snapshot.repeatMode
-        val latch = CountDownLatch(1)
-        handler.post {
-            try {
-                player?.let { p ->
-                    applyRepeatCode(p, nextRepeatCode(repeatCode(p)))
-                    refreshSnapshot()
-                    result = snapshot.repeatMode
-                }
-            } finally {
-                latch.countDown()
-            }
-        }
-        latch.await(1, TimeUnit.SECONDS)
-        return result
+    fun advanceRepeatMode(): Int = onMainBlocking(snapshot.repeatMode) {
+        player?.let { p ->
+            applyRepeatCode(p, nextRepeatCode(repeatCode(p)))
+            refreshSnapshot()
+            snapshot.repeatMode
+        } ?: snapshot.repeatMode
     }
 
     /** repeat playlist → repeat one → play single & stop → repeat playlist */

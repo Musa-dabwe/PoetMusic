@@ -78,18 +78,32 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Status bar matches the app canvas: the selected tint in light mode,
-        // the dark primary in dark mode. applyStatusBarColor picks matching
-        // icon contrast (dark icons on light, light icons on dark) by luminance.
+        applyStartupStatusBarColor()
+        startService(Intent(this, PlaybackService::class.java))
+        requestStartupPermissions()
+        wireServerCallbacks()
+
+        web = buildWebView()
+        setContentView(web)
+
+        installBackHandler()
+        loadWhenServerReady()
+    }
+
+    /**
+     * Status bar matches the app canvas: the selected tint in light mode, the
+     * dark primary in dark mode. applyStatusBarColor picks matching icon
+     * contrast (dark icons on light, light icons on dark) by luminance.
+     */
+    private fun applyStartupStatusBarColor() {
         val db = (application as PoetApp).db
         val dark = db.getSetting("dark", "0") == "1"
         val tint = Shell.CANVAS_TINTS[db.getSetting("theme", "Lavender")] ?: "#f2effa"
         applyStatusBarColor(if (dark) DARK_STATUS_BAR else tint)
+    }
 
-        startService(Intent(this, PlaybackService::class.java))
-
-        requestStartupPermissions()
-
+    /** Hand the server the native capabilities it cannot reach on its own. */
+    private fun wireServerCallbacks() {
         PoetServer.addFolderRequester = {
             runOnUiThread { pickFolder.launch(null) }
         }
@@ -102,56 +116,61 @@ class MainActivity : AppCompatActivity() {
         LibraryScanner.onFinished = {
             runJs("poetToast('Library scan finished'); if (poetScreenUrl.indexOf('/screens/library') === 0) poetGo(poetScreenUrl);")
         }
+    }
 
-        web = WebView(this)
-        with(web.settings) {
+    private fun buildWebView(): WebView = WebView(this).also { view ->
+        with(view.settings) {
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
             // Pinch and double-tap zoom would stretch the fixed pastel layout;
-            // the viewport meta and touch-action CSS in Shell.kt back this up.
+            // the viewport meta and touch-action CSS in poet.css back this up.
             setSupportZoom(false)
             builtInZoomControls = false
             displayZoomControls = false
         }
-        web.addJavascriptInterface(PoetNativeBridge(), "PoetNative")
-        web.webChromeClient = WebChromeClient()
-        web.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                // Keep in-app navigation inside the embedded server; hand any
-                // external http(s) link (e.g. the About screen's GitHub links)
-                // to the system browser instead of loading it in the WebView.
-                val url = request.url
-                if (url.host == "127.0.0.1") return false
-                if (url.scheme == "http" || url.scheme == "https") {
-                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
-                }
-                return true
-            }
+        view.addJavascriptInterface(PoetNativeBridge(), "PoetNative")
+        view.webChromeClient = WebChromeClient()
+        view.webViewClient = PoetWebViewClient()
+    }
 
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                // Serve static assets straight from the APK: no Ktor round trip
-                // and, because intercepted responses bypass Chromium's network
-                // stack, nothing lands in the WebView HTTP disk cache.
-                val url = request.url
-                if (url.host != "127.0.0.1" || url.path?.startsWith("/assets/") != true) return null
-                val name = url.lastPathSegment ?: return null
-                if (!name.matches(Regex("[A-Za-z0-9._-]+"))) return null
-                val mime = when {
-                    name.endsWith(".js") -> "application/javascript"
-                    name.endsWith(".woff2") -> "font/woff2"
-                    name.endsWith(".css") -> "text/css"
-                    else -> "application/octet-stream"
-                }
-                return try {
-                    WebResourceResponse(mime, null, assets.open("web/$name"))
-                } catch (e: Exception) {
-                    null // Fall through to the Ktor /assets route.
-                }
+    private inner class PoetWebViewClient : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            // Keep in-app navigation inside the embedded server; hand any
+            // external http(s) link (e.g. the About screen's GitHub links)
+            // to the system browser instead of loading it in the WebView.
+            val url = request.url
+            if (url.host == "127.0.0.1") return false
+            if (url.scheme == "http" || url.scheme == "https") {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
+            }
+            return true
+        }
+
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+            // Serve static assets straight from the APK: no Ktor round trip
+            // and, because intercepted responses bypass Chromium's network
+            // stack, nothing lands in the WebView HTTP disk cache.
+            val url = request.url
+            if (url.host != "127.0.0.1" || url.path?.startsWith("/assets/") != true) return null
+            val name = url.lastPathSegment ?: return null
+            if (!name.matches(Regex("[A-Za-z0-9._-]+"))) return null
+            val mime = when {
+                name.endsWith(".js") -> "application/javascript"
+                name.endsWith(".woff2") -> "font/woff2"
+                name.endsWith(".css") -> "text/css"
+                else -> "application/octet-stream"
+            }
+            return try {
+                WebResourceResponse(mime, null, assets.open("web/$name"))
+            } catch (e: Exception) {
+                null // Fall through to the Ktor /assets route.
             }
         }
-        setContentView(web)
+    }
 
+    /** Back closes overlays first; poetBack() reports 'exit' when at the root. */
+    private fun installBackHandler() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 web.evaluateJavascript("poetBack()") { result ->
@@ -159,8 +178,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
-
-        loadWhenServerReady()
     }
 
     /**
@@ -243,9 +260,12 @@ class MainActivity : AppCompatActivity() {
         PoetServer.pinWidgetRequester = null
         PoetServer.pickArtRequester = null
         TagEditor.clearPendingArt()
-        // Drop the WebView disk cache (album art HTTP responses); 'false'
-        // keeps cookies and DOM storage intact.
-        if (::web.isInitialized) web.clearCache(false)
+        // Drop the WebView cache including the disk files, so album art HTTP
+        // responses don't outlive the session. 'true' is required: with
+        // 'false' only the in-memory cache is cleared and the cached responses
+        // stay on disk. Cookies and DOM storage are a separate store that
+        // clearCache never touches.
+        if (::web.isInitialized) web.clearCache(true)
         super.onDestroy()
     }
 

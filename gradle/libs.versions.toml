@@ -1,6 +1,11 @@
 [versions]
+# App version, referenced by app/build.gradle.kts. Bump appVersionCode on
+# every release build; appVersionName is what users see.
+appVersionCode = "2"
+appVersionName = "1.1"
 agp = "8.13.0"
 kotlin = "2.1.0"
+junit = "4.13.2"
 coreKtx = "1.17.0"
 appcompat = "1.7.1"
 material = "1.13.0"
@@ -29,3 +34,4 @@ media3-session = { group = "androidx.media3", name = "media3-session", version.r
 mp3agic = { group = "com.mpatric", name = "mp3agic", version.ref = "mp3agic" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 slf4j-nop = { group = "org.slf4j", name = "slf4j-nop", version.ref = "slf4j" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
