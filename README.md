@@ -80,3 +80,9 @@ Minimum Android version: 8.0 (API 26). Target: Android 14 (API 34).
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
+
+## Credits
+
+- Placeholder cover art: [Designed by rawpixel.com / Freepik](http://www.freepik.com).
+  The original image was modified (cropped/resized) for in-app use, as permitted
+  by the Freepik free license.

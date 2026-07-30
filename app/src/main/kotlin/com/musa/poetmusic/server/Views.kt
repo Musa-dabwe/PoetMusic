@@ -1129,6 +1129,10 @@ Built by **Musa-dabwe** (Fackson Musadabwe Mutetesha).
 - **GitHub** — [Musa-dabwe](https://github.com/Musa-dabwe)
 - **Repository** — [Musa-dabwe/PoetMusic](https://github.com/Musa-dabwe/PoetMusic)
 
+## Credits
+
+- **Placeholder cover art** — [Designed by rawpixel.com / Freepik](http://www.freepik.com). The original image was modified (cropped/resized) for in-app use, as permitted by the Freepik free license.
+
 ## License
 
 Licensed under the **Apache License 2.0**.
