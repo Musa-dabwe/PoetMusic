@@ -308,9 +308,7 @@ object Views {
     private val ICON_D_PLAY = """<svg width="12" height="14" viewBox="0 0 12 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon></svg>"""
     private val ICON_D_NEXT = """<svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="1" width="10" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="6" width="10" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="11" width="7" height="2" rx="1" fill="#3b3651"></rect><polygon points="13,4 18,7 13,10" fill="#3b3651"></polygon></svg>"""
     private val ICON_D_QUEUE = """<svg width="16" height="14" viewBox="0 0 16 14"><rect x="0" y="1" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="6" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="11" width="8" height="2" rx="1" fill="#3b3651"></rect></svg>"""
-    private val ICON_D_QUEUE_ADV = """<svg width="16" height="14" viewBox="0 0 16 14"><rect x="0" y="1" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="6" width="12" height="2" rx="1" fill="#3b3651"></rect><rect x="0" y="11" width="12" height="2" rx="1" fill="#3b3651"></rect></svg>"""
     private val ICON_D_PLAYLIST = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 4 H14 M2 8 H10 M2 12 H10 M13 9 V15 M10 12 H16" stroke="#3b3651" stroke-width="2" fill="none" stroke-linecap="round"></path></svg>"""
-    private val ICON_D_MOVE = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 11 L2 14 L5 14 M2 11 L9 4 L12 7 L5 14 M9 4 L11 2 L14 5 L12 7" stroke="#3b3651" stroke-width="1.4" fill="none" stroke-linejoin="round"></path></svg>"""
     private val ICON_D_DELETE = """<svg width="14" height="16" viewBox="0 0 14 16"><path d="M2 4 H12 M5 4 V2 H9 V4 M3 4 L3.7 14 H10.3 L11 4" stroke="#c25f6e" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>"""
     private val ICON_D_TAGS = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M11 2 L14 5 L5 14 L2 14 L2 11 Z" stroke="#3b3651" stroke-width="1.6" fill="none" stroke-linejoin="round"></path></svg>"""
     private val ICON_D_SETAS = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1 L10 6 L15 6 L11 9 L12.5 14 L8 11 L3.5 14 L5 9 L1 6 L6 6 Z" stroke="#3b3651" stroke-width="1.3" fill="none" stroke-linejoin="round"></path></svg>"""
@@ -319,6 +317,9 @@ object Views {
     private val ICON_D_ARTIST = """<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="5" r="3" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><path d="M2.5 14 C2.5 10.5 5 9 8 9 C11 9 13.5 10.5 13.5 14" stroke="#3b3651" stroke-width="1.5" fill="none" stroke-linecap="round"></path></svg>"""
     private val ICON_D_FOLDER = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.5 4 L6 4 L7.5 6 L14.5 6 L14.5 13 L1.5 13 Z" stroke="#3b3651" stroke-width="1.5" fill="none" stroke-linejoin="round"></path></svg>"""
     private val ICON_D_INFO = """<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><path d="M8 7 V11.5 M8 4.6 V5" stroke="#3b3651" stroke-width="1.6" stroke-linecap="round"></path></svg>"""
+    private val ICON_D_CLOCK = """<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" stroke="#3b3651" stroke-width="1.5" fill="none"></circle><path d="M8 4.5 V8 L10.5 9.5" stroke="#3b3651" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>"""
+    private val ICON_D_HOURGLASS = """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 1.5 H12 M4 14.5 H12 M5 1.5 V4 C5 6 8 7 8 8 C8 9 5 10 5 12 V14.5 M11 1.5 V4 C11 6 8 7 8 8 C8 9 11 10 11 12 V14.5" stroke="#3b3651" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>"""
+    private val ICON_D_TIMER_OFF = """<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" stroke="#c25f6e" stroke-width="1.5" fill="none"></circle><path d="M3.5 3.5 L12.5 12.5" stroke="#c25f6e" stroke-width="1.5" stroke-linecap="round"></path></svg>"""
 
     /** One tappable row inside the options drawer. */
     private fun drawerItem(
@@ -389,16 +390,12 @@ object Views {
           ${drawerItem(ICON_D_PLAY, "Play now", """hx-post="/api/tracks/play-now?$q" hx-swap="none" hx-on::after-request="poetFinish()"""")}
           ${drawerItem(ICON_D_NEXT, "Play next", """hx-post="/api/tracks/play-next?$q" hx-swap="none" hx-on::after-request="poetFinish()"""")}
           ${drawerItem(ICON_D_QUEUE, "Add to queue", """hx-post="/api/tracks/add-queue?$q" hx-swap="none" hx-on::after-request="poetFinish()"""")}
-          ${drawerItem(ICON_D_QUEUE_ADV, "Add to queue (advanced)",
-            """hx-get="/api/library/sub?kind=advqueue&$q" hx-target="#sheet-root" hx-swap="innerHTML"""",
-            sub = "Choose queue &amp; position", chevron = true)}
 
           <div class="dsec">Playlist &amp; file</div>
           ${drawerItem(ICON_D_PLAYLIST, "Add to playlist",
             """hx-get="/api/library/sub?kind=addplaylist&$q" hx-target="#sheet-root" hx-swap="innerHTML"""")}
           $removeFromPlaylist
-          ${drawerItem(ICON_D_MOVE, "Modify / move", """onclick="poetToast('Move / rename — opening file manager'); poetFinish();"""")}
-          ${drawerItem(ICON_D_DELETE, "Delete from device",
+          ${if (ctx.ctx == "playlist") "" else drawerItem(ICON_D_DELETE, "Delete from device",
             """hx-get="/api/library/sub?kind=delete&$q" hx-target="#sheet-root" hx-swap="innerHTML"""", danger = true)}
 
           <div class="dsec">Metadata &amp; utilities</div>
@@ -413,14 +410,13 @@ object Views {
     }
 
     /** Dispatches a drawer sub-sheet by kind. */
-    fun subSheet(kind: String, db: MusicDatabase, tracks: List<Track>, ids: String, ctx: QueueCtx): String {
+    fun subSheet(kind: String, db: MusicDatabase, tracks: List<Track>, ids: String, ctx: QueueCtx, infoSizeBytes: Long = -1): String {
         val cq = ctx.query()
         val back = "poetSubBack('$ids','${esc(cq)}')"
         return when (kind) {
-            "advqueue" -> advQueueSheet(ids, back)
             "addplaylist" -> addPlaylistSheet(db, tracks, ids, back)
             "setas" -> setAsSheet(back)
-            "info" -> songInfoSheet(tracks.first(), back)
+            "info" -> songInfoSheet(tracks.first(), infoSizeBytes, back)
             "delete" -> deleteConfirmSheet(tracks, ids, back)
             else -> ""
         }
@@ -429,27 +425,6 @@ object Views {
     private fun targetLabel(tracks: List<Track>): String =
         if (tracks.size == 1) "“${esc(tracks.first().title)}”"
         else "${tracks.size} songs"
-
-    private fun advQueueSheet(ids: String, back: String): String {
-        val queues = (1..4).joinToString("") { n ->
-            """<button class="chip-choice${if (n == 1) " on" else ""}" onclick="poetAdvSel('queue',$n,this)">Queue $n</button>"""
-        }
-        val positions = listOf("Top", "Bottom", "Random").joinToString("") { p ->
-            """<button class="pos-choice${if (p == "Bottom") " on" else ""}" onclick="poetAdvSel('pos','$p',this)">$p</button>"""
-        }
-        return """
-        <div class="sheet-shield" onclick="$back"></div>
-        <div class="sheet">
-          <div class="sheet-grab"></div>
-          <div class="sheet-title" style="margin-bottom:12px;">Add to queue</div>
-          <div style="font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; margin-bottom:8px;">Which queue</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;">$queues</div>
-          <div style="font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; margin-bottom:8px;">Position</div>
-          <div style="display:flex; gap:8px; margin-bottom:20px;">$positions</div>
-          <button class="sheet-btn" style="margin-top:0;" onclick="poetAdvAdd('$ids')">Add</button>
-        </div>
-        <script>window.poetAdv={queue:1,pos:'Bottom'};</script>"""
-    }
 
     private fun addPlaylistSheet(db: MusicDatabase, tracks: List<Track>, ids: String, back: String): String {
         val picks = db.playlists().joinToString("") { p ->
@@ -489,13 +464,25 @@ object Views {
         </div>"""
     }
 
-    private fun songInfoSheet(t: Track, back: String): String {
+    /** Human-readable file size for the info sheet ("weight" of the track). */
+    private fun fmtSize(bytes: Long): String = when {
+        bytes < 0 -> "—"
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "%.0f KB".format(bytes / 1024.0)
+        bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024))
+        else -> "%.2f GB".format(bytes / (1024.0 * 1024 * 1024))
+    }
+
+    private fun songInfoSheet(t: Track, sizeBytes: Long, back: String): String {
         val ext = t.displayName.substringAfterLast('.', "").uppercase().ifBlank { "—" }
         val added = if (t.dateAdded > 0)
             java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US).format(java.util.Date(t.dateAdded)) else "—"
         val rows = listOf(
+            "Title" to t.title,
+            "Artist" to t.artist.ifBlank { "—" },
             "File name" to t.displayName,
             "Format" to ext,
+            "File size" to fmtSize(sizeBytes),
             "Duration" to fmtTime(t.durationMs),
             "Album" to t.album.ifBlank { "—" },
             "Track / disc" to "${if (t.trackNo > 0) t.trackNo else "—"} / ${if (t.discNo > 0) t.discNo else "—"}",
@@ -523,7 +510,7 @@ object Views {
         <div class="center-shield" onclick="if(event.target===this) $back">
           <div class="confirm-card">
             <div class="confirm-title">Delete from device</div>
-            <div class="confirm-msg">$msg This removes the track${if (tracks.size == 1) "" else "s"} from your library.</div>
+            <div class="confirm-msg">$msg This permanently deletes the file${if (tracks.size == 1) "" else "s"} from your device.</div>
             <div class="confirm-actions">
               <button class="btn-ghost" onclick="$back">CANCEL</button>
               <button class="btn-delete" hx-post="/api/tracks/delete?ids=$ids" hx-swap="none"
@@ -831,13 +818,11 @@ object Views {
 
             <div style="display:flex; align-items:center; gap:8px; margin-top:22px; flex-wrap:wrap; justify-content:center;">
               <button id="np-speed" class="chip" hx-post="/api/player/speed" hx-swap="none">${speedLabel(s.speed)}x</button>
-              <button id="np-sleep" class="chip${if (s.sleepRemainingMs >= 0) " on" else ""}" hx-get="/partial/sleep-menu" hx-target="#sleep-slot" hx-swap="innerHTML">sleep</button>
+              <button id="np-sleep" class="chip${if (s.sleepRemainingMs >= 0 || s.sleepSongsRemaining > 0) " on" else ""}" hx-get="/partial/sleep-menu" hx-target="#sheet-root" hx-swap="innerHTML">sleep</button>
               <button id="np-lyrics" class="chip${if (lyricsOpen) " on" else ""}" onclick="toggleLyrics(this)">lyrics</button>
               <button id="np-fav" class="chip${if (track?.favorite == true) " on" else ""}" hx-post="/api/player/favourite" hx-swap="none">favourite</button>
               <button class="chip" onclick="openQueue()">queue</button>
             </div>
-            <div id="sleep-slot" class="menu-slot" style="position:relative; z-index:45; width:100%;"></div>
-
             <div id="lyrics-deck-wrap" style="width:100%;">
               <div id="lyrics-deck"${if (lyricsOpen) """ hx-get="/api/player/lyrics" hx-trigger="load" hx-swap="innerHTML"""" else ""}></div>
             </div>
@@ -866,14 +851,43 @@ object Views {
         return """<div class="lyrics-deck">$rows</div>"""
     }
 
-    fun sleepMenu(): String = """
-        <div class="menu-shield" onclick="event.stopPropagation(); closeMenus()"></div>
-        <div class="menu" onclick="event.stopPropagation()" style="left:50%; right:auto; top:6px; transform:translateX(-50%);">
-          <button hx-post="/api/player/sleep?min=15" hx-swap="none" onclick="closeMenus()">In 15 minutes</button>
-          <button hx-post="/api/player/sleep?min=30" hx-swap="none" onclick="closeMenus()">In 30 minutes</button>
-          <button hx-post="/api/player/sleep?min=45" hx-swap="none" onclick="closeMenus()">In 45 minutes</button>
-          <button hx-post="/api/player/sleep?min=60" hx-swap="none" onclick="closeMenus()">In 1 hour</button>
-          <button hx-post="/api/player/sleep?min=0" hx-swap="none" onclick="closeMenus()">Turn off timer</button>
+    /**
+     * Sleep timer bottom drawer, styled like the library options drawer for
+     * visual uniformity. "After (N) songs" and "Custom timer" expand inline
+     * panels (stepper / minutes input) driven by the poetSleep* JS in Shell.
+     */
+    fun sleepDrawer(): String = """
+        <div class="sheet-shield" onclick="closeSheet()"></div>
+        <div class="drawer">
+          <div class="sheet-grab"></div>
+          <div class="drawer-head">
+            <div class="drawer-head-art" style="background:var(--accent-faint); font-size:18px;">☾</div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:15px; font-weight:700;">Sleep timer</div>
+              <div style="font-size:12px; color:var(--muted);">Music pauses when the timer ends</div>
+            </div>
+          </div>
+          ${drawerItem(ICON_D_CLOCK, "In 30 min",
+            """hx-post="/api/player/sleep?min=30" hx-swap="none" hx-on::after-request="closeSheet()"""")}
+          ${drawerItem(ICON_D_CLOCK, "In 1 hr",
+            """hx-post="/api/player/sleep?min=60" hx-swap="none" hx-on::after-request="closeSheet()"""")}
+          ${drawerItem(ICON_D_QUEUE, "After (N) songs", """onclick="poetSleepPanel('songs')"""",
+            sub = "Stop once the songs finish", chevron = true)}
+          <div id="sleep-songs-panel" class="sleep-panel" hidden>
+            <button class="sleep-step" onclick="poetSleepAdj(-1)">−</button>
+            <div class="sleep-count"><span id="sleep-songs-n">3</span> songs</div>
+            <button class="sleep-step" onclick="poetSleepAdj(1)">+</button>
+            <button class="sleep-set" onclick="poetSleepSetSongs()">Set</button>
+          </div>
+          ${drawerItem(ICON_D_HOURGLASS, "Custom timer", """onclick="poetSleepPanel('custom')"""",
+            sub = "Pick your own minutes", chevron = true)}
+          <div id="sleep-custom-panel" class="sleep-panel" hidden>
+            <input id="sleep-custom-min" type="number" inputmode="numeric" min="1" max="600" value="45">
+            <div class="sleep-count" style="flex:0 0 auto;">min</div>
+            <button class="sleep-set" onclick="poetSleepSetCustom()">Set</button>
+          </div>
+          ${drawerItem(ICON_D_TIMER_OFF, "Turn off timer",
+            """hx-post="/api/player/sleep?min=0" hx-swap="none" hx-on::after-request="closeSheet()"""", danger = true)}
         </div>"""
 
     // ---------------- queue panel ----------------

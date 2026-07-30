@@ -69,9 +69,11 @@ html[data-theme="dark"] {
   --lyric-dim: #7b7690;
   --link: #c3b2f0;
   --card-bg: #1e1e24;
-  --card-glass: rgba(30,30,36,0.88);
-  --menu-glass: rgba(38,38,46,0.94);
-  --lyrics-glass: rgba(30,30,36,0.75);
+  /* opaque: dark mode runs without blur, so translucent glass would show
+     smeared content behind it instead of a frosted surface */
+  --card-glass: #1e1e24;
+  --menu-glass: #26262e;
+  --lyrics-glass: #1e1e24;
   --input-bg: #26262e;
   --overlay-faint: rgba(255,255,255,0.04);
   --overlay-neutral: rgba(255,255,255,0.07);
@@ -89,6 +91,13 @@ html[data-theme="dark"] {
 html[data-theme="dark"] input::placeholder, html[data-theme="dark"] textarea::placeholder { color: #6f6b82; }
 /* accent-faint chips lose too much contrast over dark cards */
 html[data-theme="dark"] .dicon { background: var(--accent-soft); }
+/* dark mode: WebView compositing bleeds blurred layers (button/cover glass
+   halos leak outside their bounds), so every backdrop blur is disabled and
+   the glass surfaces above are opaque instead */
+html[data-theme="dark"] .sheet-shield, html[data-theme="dark"] .center-shield,
+html[data-theme="dark"] .queue-shield, html[data-theme="dark"] .menu,
+html[data-theme="dark"] .lyrics-deck, html[data-theme="dark"] #tray,
+html[data-theme="dark"] #modal-root .modal-shield { backdrop-filter:none; -webkit-backdrop-filter:none; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin:0; padding:0; }
 body { background: var(--bg); font-family:'Outfit', sans-serif; color: var(--ink); transition: background 0.25s, color 0.25s;
@@ -202,14 +211,6 @@ body.select-mode #cab { display:block; }
 .ditem-danger:hover { background:rgba(220,110,120,0.1); }
 
 /* drawer sub-sheets */
-.chip-choice { border:1.5px solid var(--card-border-soft); cursor:pointer; padding:9px 16px; border-radius:99px;
-  background:var(--card-bg); color:var(--ink); font-size:13px; font-weight:600; }
-.chip-choice:active { transform:scale(0.95); }
-.chip-choice.on { border-color:var(--ink); background:var(--accent-faint); }
-.pos-choice { flex:1; border:1.5px solid var(--card-border-soft); cursor:pointer; padding:11px 0; border-radius:12px;
-  background:var(--card-bg); color:var(--ink); font-size:13px; font-weight:600; }
-.pos-choice:active { transform:scale(0.97); }
-.pos-choice.on { border-color:var(--ink); background:var(--accent-faint); }
 .sheet-btn { border:none; cursor:pointer; width:100%; padding:14px; border-radius:14px; background:var(--accent); color:#3b3651;
   font-size:14px; font-weight:700; box-shadow:0 3px 12px var(--accent-shadow); margin-top:14px; }
 .sheet-btn:active { transform:scale(0.98); }
@@ -493,6 +494,22 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .modal input:focus { outline:none; border-color: var(--accent); }
 #toast { position:fixed; bottom:96px; left:50%; transform:translateX(-50%); z-index:90; background:var(--panel-strong); color:var(--panel-strong-text); font-size:13px; font-weight:600; padding:10px 18px; border-radius:99px; box-shadow:0 8px 24px rgba(59,54,81,0.35); opacity:0; pointer-events:none; transition:opacity 0.25s; max-width:85vw; text-align:center; }
 #toast.show { opacity:1; }
+/* accent variant: minimal pill for Now Playing state changes (shuffle/repeat/sleep) */
+#toast.accent { background:var(--accent); color:#3b3651; box-shadow:0 8px 24px var(--accent-shadow); }
+
+/* sleep timer drawer: inline expanding panels (song stepper / custom minutes) */
+.sleep-panel { display:flex; align-items:center; gap:10px; margin:2px 14px 10px 62px; padding:10px 12px;
+  border-radius:12px; background:var(--overlay-faint); animation:poet-fade 0.15s ease-out; }
+.sleep-step { border:1.5px solid var(--card-border-soft); cursor:pointer; width:34px; height:34px; border-radius:10px;
+  background:var(--card-bg); color:var(--ink); font-size:17px; font-weight:700; line-height:1; flex-shrink:0; }
+.sleep-step:active { transform:scale(0.92); }
+.sleep-count { flex:1; text-align:center; font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; }
+.sleep-set { border:none; cursor:pointer; padding:9px 18px; border-radius:10px; background:var(--accent); color:#3b3651;
+  font-size:13px; font-weight:700; flex-shrink:0; }
+.sleep-set:active { transform:scale(0.95); }
+.sleep-panel input { width:64px; border:1.5px solid var(--card-border-soft); border-radius:10px; padding:8px 10px;
+  font-family:inherit; font-size:14px; font-weight:700; color:var(--ink); background:var(--input-bg); text-align:center; }
+.sleep-panel input:focus { outline:none; border-color:var(--accent); }
 
 .empty { text-align:center; color:var(--muted); padding:48px 20px; font-size:14px; }
 .searchrow { display:flex; gap:8px; margin-bottom:14px; }
@@ -627,9 +644,10 @@ function fmt(ms) {
 
 function poetGo(url) { htmx.ajax('GET', url, { target: '#main-container', swap: 'innerHTML' }); }
 
-function poetToast(msg) {
+function poetToast(msg, accent) {
   var t = document.getElementById('toast');
   t.textContent = msg;
+  t.classList.toggle('accent', !!accent);
   t.classList.add('show');
   clearTimeout(t._h);
   t._h = setTimeout(function () { t.classList.remove('show'); }, 2200);
@@ -685,6 +703,7 @@ document.addEventListener('click', function (e) {
 });
 
 document.body.addEventListener('poet-toast', function (e) { poetToast(e.detail.value || e.detail); });
+document.body.addEventListener('poet-toast-accent', function (e) { poetToast(e.detail.value || e.detail, true); });
 document.body.addEventListener('poet-refresh', function () { closeMenus(); poetGo(poetScreenUrl); });
 document.body.addEventListener('poet-close-modal', function () {
   if (window.poetEd && poetEd.tick) clearInterval(poetEd.tick);
@@ -806,18 +825,30 @@ function poetAddPlaylists(ids) {
   poetFinish();
 }
 
-/* advanced-queue sub-sheet: choose queue + position, then commit */
-function poetAdvSel(group, val, el) {
-  window.poetAdv = window.poetAdv || { queue: 1, pos: 'Bottom' };
-  poetAdv[group] = val;
-  var siblings = el.parentElement.children;
-  for (var i = 0; i < siblings.length; i++) siblings[i].classList.remove('on');
-  el.classList.add('on');
+/* sleep timer drawer: expanding panels + commit */
+function poetSleepPanel(kind) {
+  var s = document.getElementById('sleep-songs-panel'), c = document.getElementById('sleep-custom-panel');
+  if (!s || !c) return;
+  var open = kind === 'songs' ? s : c, other = kind === 'songs' ? c : s;
+  other.hidden = true;
+  open.hidden = !open.hidden;
 }
-function poetAdvAdd(ids) {
-  var adv = window.poetAdv || { queue: 1, pos: 'Bottom' };
-  htmx.ajax('POST', '/api/tracks/advqueue?ids=' + ids + '&queue=' + adv.queue + '&pos=' + adv.pos, { swap: 'none' });
-  poetFinish();
+function poetSleepAdj(d) {
+  var el = document.getElementById('sleep-songs-n');
+  if (!el) return;
+  el.textContent = Math.min(99, Math.max(1, Number(el.textContent) + d));
+}
+function poetSleepSetSongs() {
+  var el = document.getElementById('sleep-songs-n');
+  var n = el ? Number(el.textContent) || 1 : 1;
+  htmx.ajax('POST', '/api/player/sleep-songs?n=' + n, { swap: 'none' });
+  closeSheet();
+}
+function poetSleepSetCustom() {
+  var v = Number((document.getElementById('sleep-custom-min') || {}).value);
+  if (!v || v < 1) { poetToast('Enter the minutes first'); return; }
+  htmx.ajax('POST', '/api/player/sleep?min=' + Math.min(600, Math.round(v)), { swap: 'none' });
+  closeSheet();
 }
 
 /* delegated row interaction: menu button, play, or select-toggle */
@@ -864,6 +895,40 @@ document.addEventListener('contextmenu', function (e) {
   var row = e.target.closest('.row[data-play-url]');
   if (row) { e.preventDefault(); poetEnterSelect(Number(row.getAttribute('data-track-id'))); }
 });
+
+/* ---- bottom drawers: swipe down to close ----
+   When a drawer/sheet in #sheet-root is scrolled to the top, dragging it
+   downward moves it with the finger; past the threshold it closes, otherwise
+   it springs back. Upward drags fall through to normal drawer scrolling. */
+(function () {
+  var panel = null, startY = 0, dy = 0, dragging = false;
+  document.addEventListener('touchstart', function (e) {
+    panel = e.target.closest('#sheet-root .drawer, #sheet-root .sheet');
+    if (!panel || e.target.closest('input, textarea')) { panel = null; return; }
+    startY = e.touches[0].clientY; dy = 0; dragging = false;
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!panel) return;
+    dy = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (dy > 8 && panel.scrollTop <= 0) { dragging = true; panel.style.transition = 'none'; }
+      else if (dy < -8) { panel = null; return; } /* scrolling up: leave it alone */
+    }
+    if (dragging) {
+      panel.style.transform = 'translate(-50%,' + Math.max(0, dy) + 'px)';
+      e.preventDefault();
+    }
+  }, { passive: false });
+  function endDrag() {
+    if (!panel) return;
+    var p = panel; panel = null;
+    if (dragging && dy > 90) { closeSheet(); }
+    else { p.style.transition = ''; p.style.transform = ''; }
+    dragging = false;
+  }
+  document.addEventListener('touchend', endDrag);
+  document.addEventListener('touchcancel', endDrag);
+})();
 
 /* ---- queue panel: drag the grab handle to reorder upcoming songs ----
    The handle has touch-action:none, so the browser never scrolls the panel
@@ -967,7 +1032,11 @@ function applyState(s) {
     var sp = document.getElementById('np-speed');
     if (sp) sp.textContent = s.speed.toFixed(2).replace(/0$/, '').replace(/\.0$/, '.0') + 'x';
     var sl = document.getElementById('np-sleep');
-    if (sl) sl.textContent = s.sleep >= 0 ? 'sleep ' + Math.ceil(s.sleep / 60000) + 'm' : 'sleep';
+    if (sl) {
+      sl.textContent = s.sleep >= 0 ? 'sleep ' + Math.ceil(s.sleep / 60000) + 'm'
+        : s.sleepSongs > 0 ? 'sleep ' + s.sleepSongs + '♪' : 'sleep';
+      sl.classList.toggle('on', s.sleep >= 0 || s.sleepSongs > 0);
+    }
     var fv = document.getElementById('np-fav');
     if (fv) fv.classList.toggle('on', !!s.fav);
     var deck = document.getElementById('lyrics-deck');
