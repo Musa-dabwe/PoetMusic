@@ -1,7 +1,6 @@
 package com.musa.poetmusic.server
 
 import com.musa.poetmusic.BuildConfig
-import com.musa.poetmusic.data.AppSettings
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.MusicDatabase
 
@@ -30,7 +29,9 @@ object SettingsViews {
             </div>""" else ""
         val shield = if (showTip) """<div id="tip-shield" onclick="dismissTip()"></div>""" else ""
 
-        val (accent, theme, dark) = AppSettings.from(db)
+        val accent = db.getSetting("accent", "#b9a5ec")
+        val theme = db.getSetting("theme", "Lavender")
+        val dark = db.getSetting("dark", "0") == "1"
         val swatches = Shell.ACCENTS.joinToString("") { c ->
             """<button class="swatch${if (c == accent) " on" else ""}" data-c="$c" style="background:$c;" onclick="setAccent('$c')"></button>"""
         }
