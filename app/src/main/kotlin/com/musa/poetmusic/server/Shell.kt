@@ -613,21 +613,15 @@ var ICON_PAUSE_SM = '<div style="display:flex; gap:4px;"><div style="width:4px; 
 var ICON_PLAY_LG = '<svg width="22" height="26" viewBox="0 0 22 26" style="margin-left:4px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>';
 var ICON_PAUSE_LG = '<div style="display:flex; gap:6px;"><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div><div style="width:6px; height:24px; background:#3b3651; border-radius:2px;"></div></div>';
 
-/* shuffle button, indexed by mode: 0 play in order, 1 shuffle songs, 2 shuffle albums */
-var ICON_SHUFFLE = [
-  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line><polyline points="16 15 19 18 16 21"></polyline></svg>',
-  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>',
-  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="11" y1="13" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><circle cx="5.5" cy="18.5" r="4"></circle><circle cx="5.5" cy="18.5" r="0.6" fill="currentColor"></circle></svg>'
-];
-var SHUFFLE_TITLES = ['Play in order', 'Shuffle songs', 'Shuffle albums'];
-/* repeat button, indexed by mode: 0 off, 1 repeat one, 2 repeat playlist, 3 play single & stop */
-var ICON_REPEAT = [
-  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="19" y2="12"></line><polyline points="13 6 19 12 13 18"></polyline></svg>',
-  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path><text x="12" y="15" font-size="9" stroke-width="1" fill="currentColor" text-anchor="middle">1</text></svg>',
-  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>',
-  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><text x="8" y="17" font-size="13" stroke-width="1" fill="currentColor" text-anchor="middle">1</text><rect x="14" y="9" width="6" height="6" fill="currentColor" stroke="none"></rect></svg>'
-];
-var REPEAT_TITLES = ['Play queue through', 'Repeat one song', 'Repeat playlist', 'Play single song and stop'];
+/* shuffle button, indexed by mode: 0 play in order, 1 shuffle songs.
+   Icons are interpolated from Views so the poller and the server render
+   the exact same markup. */
+var ICON_SHUFFLE = ['${Views.shuffleIcon(0)}', '${Views.shuffleIcon(1)}'];
+var SHUFFLE_TITLES = ['${Views.shuffleTitle(0)}', '${Views.shuffleTitle(1)}'];
+/* repeat button, indexed by mode: 1 repeat one, 2 repeat playlist, 3 play
+   single & stop; slot 0 falls back to repeat playlist for stale state. */
+var ICON_REPEAT = ['${Views.repeatIcon(2)}', '${Views.repeatIcon(1)}', '${Views.repeatIcon(2)}', '${Views.repeatIcon(3)}'];
+var REPEAT_TITLES = ['${Views.repeatTitle(2)}', '${Views.repeatTitle(1)}', '${Views.repeatTitle(2)}', '${Views.repeatTitle(3)}'];
 
 var poetScreenUrl = '/screens/library';
 var poetSeeking = false;
@@ -1025,7 +1019,7 @@ function applyState(s) {
     }
     var rp = document.getElementById('np-repeat');
     if (rp) {
-      rp.classList.toggle('on', s.repeat !== 0);
+      rp.classList.toggle('on', s.repeat === 1 || s.repeat === 3);
       var rpIcon = ICON_REPEAT[s.repeat] || ICON_REPEAT[0];
       if (rp._icon !== rpIcon) { rp._icon = rpIcon; rp.innerHTML = rpIcon; rp.title = REPEAT_TITLES[s.repeat] || REPEAT_TITLES[0]; }
     }
@@ -1078,6 +1072,13 @@ function sliderDone(el) {
 }
 
 /* ---- theming ---- */
+/* Status bar tracks the canvas: light mode paints it in the selected tint
+   (dark icons), dark mode in the dark primary (light icons) — the native
+   side derives icon contrast from the color's luminance. */
+function poetSyncStatusBar() {
+  if (window.PoetNative && PoetNative.setStatusBarColor)
+    PoetNative.setStatusBarColor(window.POET.dark ? '#16151d' : (window.POET.themeBg || '#f2effa'));
+}
 function setAccent(c) {
   var r = document.documentElement.style;
   r.setProperty('--accent', c);
@@ -1085,7 +1086,6 @@ function setAccent(c) {
   r.setProperty('--accent-soft', c + '66');
   r.setProperty('--accent-shadow', c + '80');
   window.POET.accent = c;
-  if (window.PoetNative && PoetNative.setStatusBarColor) PoetNative.setStatusBarColor(c);
   fetch('/api/settings/accent', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'c=' + encodeURIComponent(c) });
   document.querySelectorAll('.swatch').forEach(function (s) { s.classList.toggle('on', s.getAttribute('data-c') === c); });
 }
@@ -1096,6 +1096,7 @@ function setTheme(name, bg) {
   else document.documentElement.style.setProperty('--bg', bg);
   window.POET.theme = name;
   window.POET.themeBg = bg;
+  poetSyncStatusBar();
   fetch('/api/settings/theme', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'name=' + encodeURIComponent(name) });
   document.querySelectorAll('.tint-pill').forEach(function (p) { p.classList.toggle('on', p.getAttribute('data-n') === name); });
 }
@@ -1110,6 +1111,7 @@ function setDark(on) {
     root.removeAttribute('data-theme');
     if (window.POET.themeBg) root.style.setProperty('--bg', window.POET.themeBg);
   }
+  poetSyncStatusBar();
   fetch('/api/settings/dark', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'on=' + (on ? '1' : '0') });
   document.querySelectorAll('.theme-opt').forEach(function (b) { b.classList.toggle('on', (b.getAttribute('data-dark') === '1') === on); });
 }

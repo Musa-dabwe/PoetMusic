@@ -71,11 +71,17 @@ object PoetServer {
         }
     }
 
+    /** Branded cover shown for tracks with no embedded artwork. */
+    private var placeholderArt: ByteArray? = null
+
     @Synchronized
     fun start(context: Context, db: MusicDatabase) {
         if (started) return
         started = true
         val app = context.applicationContext
+        placeholderArt = runCatching {
+            app.assets.open("web/placeholder.jpg").use { it.readBytes() }
+        }.getOrNull()
 
         embeddedServer(CIO, port = 8080, host = "127.0.0.1") {
             routing {
@@ -625,10 +631,15 @@ object PoetServer {
                             runCatching { mmr.release() }
                         }
                     }
+                    val ph = placeholderArt
                     if (art != null) {
                         artCachePut(id, art)
                         call.response.header("Cache-Control", "max-age=3600")
                         call.respondBytes(art, ContentType.parse("image/jpeg"))
+                    } else if (ph != null) {
+                        // Branded placeholder cover for tracks without artwork.
+                        call.response.header("Cache-Control", "max-age=3600")
+                        call.respondBytes(ph, ContentType.parse("image/jpeg"))
                     } else {
                         val bg = artColor(id)
                         val label = esc(initials(track?.title ?: "?"))

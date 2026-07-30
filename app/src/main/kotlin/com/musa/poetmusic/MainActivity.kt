@@ -25,6 +25,7 @@ import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.TagEditor
 import com.musa.poetmusic.playback.PlaybackService
 import com.musa.poetmusic.server.PoetServer
+import com.musa.poetmusic.server.Shell
 import com.musa.poetmusic.widget.PoetWidgetProvider
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -77,8 +78,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Status bar follows the user's accent color instead of the theme default.
-        applyStatusBarColor((application as PoetApp).db.getSetting("accent", "#b9a5ec"))
+        // Status bar matches the app canvas: the selected tint in light mode,
+        // the dark primary in dark mode. applyStatusBarColor picks matching
+        // icon contrast (dark icons on light, light icons on dark) by luminance.
+        val db = (application as PoetApp).db
+        val dark = db.getSetting("dark", "0") == "1"
+        val tint = Shell.CANVAS_TINTS[db.getSetting("theme", "Lavender")] ?: "#f2effa"
+        applyStatusBarColor(if (dark) DARK_STATUS_BAR else tint)
 
         startService(Intent(this, PlaybackService::class.java))
 
@@ -190,7 +196,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyStatusBarColor(hex: String) {
         val color = runCatching { Color.parseColor(hex) }.getOrNull() ?: return
         window.statusBarColor = color
-        // Pastel accents are light, so keep the status bar icons dark.
+        // Light canvas → dark status bar icons; dark canvas → light icons.
         val luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = luminance > 0.5
     }
@@ -245,5 +251,8 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val MAX_ART_BYTES = 8 * 1024 * 1024
+
+        /** Dark-mode primary (--bg in Shell's dark palette). */
+        const val DARK_STATUS_BAR = "#16151d"
     }
 }
