@@ -3,6 +3,8 @@ package com.musa.poetmusic.server
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.LrcParser
 import com.musa.poetmusic.data.MusicDatabase
@@ -174,7 +176,7 @@ object PoetServer {
                 }
 
                 get("/partial/sleep-menu") {
-                    call.respondText(Views.sleepMenu(), ContentType.Text.Html)
+                    call.respondText(Views.sleepDrawer(), ContentType.Text.Html)
                 }
 
                 get("/partial/sort-drawer") {
@@ -214,7 +216,7 @@ object PoetServer {
                     val mod = track?.lastModified ?: 0
                     val json = """{"trackId":${s.trackId},"title":${jsonStr(s.title)},"artist":${jsonStr(s.artist)},""" +
                         """"pos":${s.positionMs},"dur":${s.durationMs},"playing":${s.playing},"shuffle":${s.shuffleMode},""" +
-                        """"repeat":${s.repeatMode},"speed":${s.speed},"sleep":${s.sleepRemainingMs},"hasQueue":${s.hasQueue},"fav":$fav,"mod":$mod}"""
+                        """"repeat":${s.repeatMode},"speed":${s.speed},"sleep":${s.sleepRemainingMs},"sleepSongs":${s.sleepSongsRemaining},"hasQueue":${s.hasQueue},"fav":$fav,"mod":$mod}"""
                     call.respondText(json, ContentType.Application.Json)
                 }
 
@@ -295,10 +297,14 @@ object PoetServer {
                    hx-swap="outerHTML") so the tap gets instant feedback instead
                    of waiting for the poller. */
                 post("/api/player/shuffle") {
-                    call.respondText(Views.shuffleButton(PlayerController.advanceShuffleMode()), ContentType.Text.Html)
+                    val mode = PlayerController.advanceShuffleMode()
+                    call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(Views.shuffleTitle(mode))}}""")
+                    call.respondText(Views.shuffleButton(mode), ContentType.Text.Html)
                 }
                 post("/api/player/repeat") {
-                    call.respondText(Views.repeatButton(PlayerController.advanceRepeatMode()), ContentType.Text.Html)
+                    val mode = PlayerController.advanceRepeatMode()
+                    call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(Views.repeatTitle(mode))}}""")
+                    call.respondText(Views.repeatButton(mode), ContentType.Text.Html)
                 }
                 post("/api/player/speed") { PlayerController.cycleSpeed(); noContent() }
 
@@ -312,7 +318,13 @@ object PoetServer {
                 post("/api/player/sleep") {
                     val min = call.request.queryParameters["min"]?.toIntOrNull() ?: 0
                     PlayerController.setSleepTimer(min)
-                    toast(if (min > 0) "Sleep timer set: $min min" else "Sleep timer off")
+                    toastAccent(if (min > 0) "Sleep timer set: $min min" else "Sleep timer off")
+                }
+
+                post("/api/player/sleep-songs") {
+                    val n = call.request.queryParameters["n"]?.toIntOrNull()?.coerceIn(0, 99) ?: 0
+                    PlayerController.setSleepSongs(n)
+                    toastAccent(if (n > 0) "Sleeping after $n ${if (n == 1) "song" else "songs"}" else "Sleep timer off")
                 }
 
                 get("/api/player/lyrics") {
@@ -332,13 +344,14 @@ object PoetServer {
                     call.respondText(Views.optionsDrawer(db, tracks, idsRaw, queueCtx()), ContentType.Text.Html)
                 }
 
-                /** Drawer sub-sheets: advanced queue, add-to-playlist, set-as, info, delete. */
+                /** Drawer sub-sheets: add-to-playlist, set-as, info, delete. */
                 get("/api/library/sub") {
                     val kind = call.request.queryParameters["kind"] ?: ""
                     val idsRaw = call.request.queryParameters["ids"] ?: ""
                     val tracks = idList(idsRaw).mapNotNull(db::track)
                     if (tracks.isEmpty()) return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.subSheet(kind, db, tracks, idsRaw, queueCtx()), ContentType.Text.Html)
+                    val infoSize = if (kind == "info") fileSize(app, tracks.first().uri) else -1L
+                    call.respondText(Views.subSheet(kind, db, tracks, idsRaw, queueCtx(), infoSize), ContentType.Text.Html)
                 }
 
                 // ---------- batch track actions (single ⋯ or multi-select) ----------
@@ -366,20 +379,6 @@ object PoetServer {
                     toast(if (tracks.size == 1) "Added to queue: ${tracks.first().title}" else "Added ${tracks.size} to queue")
                 }
 
-                post("/api/tracks/advqueue") {
-                    val tracks = idList().mapNotNull(db::track)
-                    if (tracks.isEmpty()) return@post noContent()
-                    val queue = call.request.queryParameters["queue"]?.toIntOrNull() ?: 1
-                    val pos = call.request.queryParameters["pos"] ?: "Bottom"
-                    // The player exposes a single active queue; alternate queues are
-                    // acknowledged with a toast. Top→play next, otherwise append.
-                    if (queue == 1) {
-                        if (pos == "Top") tracks.asReversed().forEach(PlayerController::playNext)
-                        else tracks.forEach(PlayerController::addToQueue)
-                    }
-                    toast("Added to Queue $queue (${pos.lowercase()})")
-                }
-
                 post("/api/tracks/add-playlists") {
                     val ids = idList()
                     val pids = idList(call.request.queryParameters["pids"] ?: "")
@@ -393,8 +392,32 @@ object PoetServer {
                 post("/api/tracks/delete") {
                     val ids = idList()
                     if (ids.isEmpty()) return@post noContent()
-                    ids.forEach(db::removeTrack)
-                    refresh(if (ids.size == 1) "Deleted 1 file" else "Deleted ${ids.size} files")
+                    // Physically delete the file through SAF; only drop rows for
+                    // files that were actually removed so the library stays honest.
+                    val deletedIds = mutableListOf<Long>()
+                    var failed = 0
+                    ids.forEach { id ->
+                        val t = db.track(id) ?: return@forEach
+                        val ok = try {
+                            DocumentsContract.deleteDocument(app.contentResolver, Uri.parse(t.uri))
+                        } catch (e: Exception) {
+                            false
+                        }
+                        if (ok) {
+                            artCacheEvict(id)
+                            db.removeTrack(id)
+                            deletedIds += id
+                        } else failed++
+                    }
+                    // A deleted file must not linger in the play queue.
+                    PlayerController.removeTracksFromQueue(deletedIds)
+                    val deleted = deletedIds.size
+                    val msg = when {
+                        deleted == 0 -> "Couldn't delete ${if (ids.size == 1) "the file" else "the files"}"
+                        failed == 0 -> if (deleted == 1) "Deleted 1 file from device" else "Deleted $deleted files from device"
+                        else -> "Deleted $deleted, $failed failed"
+                    }
+                    refresh(msg)
                 }
 
                 /**
@@ -683,6 +706,21 @@ object PoetServer {
     private suspend fun PipelineContext<Unit, ApplicationCall>.toast(msg: String) {
         call.response.header("HX-Trigger", """{"poet-toast":${jsonStr(msg)}}""")
         call.respond(HttpStatusCode.NoContent)
+    }
+
+    /** Accent-colored pill toast, used for Now Playing state changes. */
+    private suspend fun PipelineContext<Unit, ApplicationCall>.toastAccent(msg: String) {
+        call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(msg)}}""")
+        call.respond(HttpStatusCode.NoContent)
+    }
+
+    /** File size in bytes for a SAF document uri, or -1 when unknown. */
+    private fun fileSize(context: Context, uri: String): Long = try {
+        context.contentResolver.query(Uri.parse(uri), arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L
+        } ?: -1L
+    } catch (e: Exception) {
+        -1L
     }
 
     private suspend fun PipelineContext<Unit, ApplicationCall>.refresh(msg: String) {

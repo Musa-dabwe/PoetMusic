@@ -57,7 +57,8 @@ object PlayerController {
         val repeatMode: Int = REPEAT_OFF,
         val speed: Float = 1f,
         val hasQueue: Boolean = false,
-        val sleepRemainingMs: Long = -1
+        val sleepRemainingMs: Long = -1,
+        val sleepSongsRemaining: Int = 0
     )
 
     /** One entry of the live play queue, in the order it will actually play. */
@@ -90,11 +91,11 @@ object PlayerController {
      */
     @Volatile var onSnapshotRefreshed: ((Snapshot) -> Unit)? = null
 
+    /** Wall-clock instant the minute-based sleep timer expires; -1 when off. */
     private var sleepDeadline: Long = -1
-    private val sleepRunnable = Runnable {
-        player?.pause()
-        sleepDeadline = -1
-    }
+
+    /** Songs left before the after-N-songs sleep timer pauses; 0 when off. */
+    private var sleepSongs = 0
 
     private var lastPersistAt = 0L
     private var lastPersistedIds = ""
@@ -102,6 +103,14 @@ object PlayerController {
 
     private val refresher = object : Runnable {
         override fun run() {
+            // Enforce the sleep deadline against the wall clock here rather
+            // than with a postDelayed runnable: delayed messages run on
+            // uptimeMillis, which stalls in deep sleep, so a timer set for
+            // 30 min could fire arbitrarily late (or seemingly never).
+            if (sleepDeadline > 0 && System.currentTimeMillis() >= sleepDeadline) {
+                sleepDeadline = -1
+                player?.pause()
+            }
             refreshSnapshot()
             onSnapshotRefreshed?.invoke(snapshot)
             persistIfDue()
@@ -111,6 +120,19 @@ object PlayerController {
 
     fun attach(p: ExoPlayer) {
         player = p
+        // Count song completions for the after-N-songs sleep timer. A repeat
+        // of the same song counts as a song; user-initiated skips don't.
+        p.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (sleepSongs <= 0) return
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
+                    reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+                ) {
+                    sleepSongs--
+                    if (sleepSongs == 0) p.pause()
+                }
+            }
+        })
         handler.removeCallbacks(refresher)
         handler.post(refresher)
     }
@@ -122,9 +144,9 @@ object PlayerController {
 
     fun detach() {
         handler.removeCallbacks(refresher)
-        handler.removeCallbacks(sleepRunnable)
         persistNow()
         sleepDeadline = -1
+        sleepSongs = 0
         player = null
         snapshot = Snapshot()
         masterIds = emptyList()
@@ -154,7 +176,8 @@ object PlayerController {
             repeatMode = repeatCode(p),
             speed = p.playbackParameters.speed,
             hasQueue = p.mediaItemCount > 0,
-            sleepRemainingMs = if (sleepDeadline > 0) (sleepDeadline - System.currentTimeMillis()).coerceAtLeast(0) else -1
+            sleepRemainingMs = if (sleepDeadline > 0) (sleepDeadline - System.currentTimeMillis()).coerceAtLeast(0) else -1,
+            sleepSongsRemaining = sleepSongs
         )
     }
 
@@ -288,6 +311,25 @@ object PlayerController {
             if (item.mediaId != id) continue
             val rebuilt = item.buildUpon().setUri(Uri.parse(newUri)).build()
             p.replaceMediaItem(i, rebuilt)
+        }
+    }
+
+    /**
+     * Purge every queue entry for tracks that were deleted from the device.
+     * Iterates backwards so indices stay valid while removing; removing the
+     * currently playing item makes ExoPlayer advance to the next song (or end
+     * playback when nothing is left). The master order forgets them too, so
+     * un-shuffling can't resurrect a deleted file.
+     */
+    fun removeTracksFromQueue(trackIds: Collection<Long>) {
+        if (trackIds.isEmpty()) return
+        val idSet = trackIds.toHashSet()
+        val mediaIds = trackIds.mapTo(HashSet()) { it.toString() }
+        onMain { p ->
+            for (i in p.mediaItemCount - 1 downTo 0) {
+                if (p.getMediaItemAt(i).mediaId in mediaIds) p.removeMediaItem(i)
+            }
+            masterIds = masterIds.filterNot { it in idSet }
         }
     }
 
@@ -529,16 +571,20 @@ object PlayerController {
         p.setPlaybackSpeed(steps[(idx + 1).mod(steps.size)])
     }
 
-    /** minutes <= 0 cancels the timer. */
+    /** minutes <= 0 cancels every sleep timer (minute- and song-based). */
     fun setSleepTimer(minutes: Int) {
         handler.post {
-            handler.removeCallbacks(sleepRunnable)
-            if (minutes > 0) {
-                sleepDeadline = System.currentTimeMillis() + minutes * 60_000L
-                handler.postDelayed(sleepRunnable, minutes * 60_000L)
-            } else {
-                sleepDeadline = -1
-            }
+            sleepSongs = 0
+            sleepDeadline = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else -1
+            refreshSnapshot()
+        }
+    }
+
+    /** Pause after [count] more songs finish playing; <= 0 cancels. */
+    fun setSleepSongs(count: Int) {
+        handler.post {
+            sleepDeadline = -1
+            sleepSongs = count.coerceAtLeast(0)
             refreshSnapshot()
         }
     }
