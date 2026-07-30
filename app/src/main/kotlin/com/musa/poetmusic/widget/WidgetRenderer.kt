@@ -20,7 +20,6 @@ import android.widget.RemoteViews
 import com.musa.poetmusic.MainActivity
 import com.musa.poetmusic.PoetApp
 import com.musa.poetmusic.R
-import com.musa.poetmusic.data.AppSettings
 import com.musa.poetmusic.data.MusicDatabase
 import com.musa.poetmusic.playback.PlaybackService
 import com.musa.poetmusic.playback.PlayerController
@@ -88,10 +87,10 @@ object WidgetRenderer {
         if (ids.isEmpty()) return
         val db = (context as? PoetApp)?.db ?: (context.applicationContext as? PoetApp)?.db ?: return
 
-        val settings = AppSettings.from(db)
-        val accent = parseColor(settings.accent, 0xFFB9A5EC.toInt())
+        val accent = parseColor(db.getSetting("accent", "#b9a5ec"), 0xFFB9A5EC.toInt())
+        val canvasName = db.getSetting("theme", "Lavender")
         val canvas = parseColor(
-            Shell.CANVAS_TINTS[settings.theme] ?: Shell.CANVAS_TINTS.getValue(AppSettings.DEFAULT_THEME),
+            Shell.CANVAS_TINTS[canvasName] ?: Shell.CANVAS_TINTS.getValue("Lavender"),
             0xFFF2EFFA.toInt()
         )
 

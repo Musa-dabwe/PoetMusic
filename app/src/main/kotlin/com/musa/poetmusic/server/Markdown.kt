@@ -11,17 +11,6 @@ package com.musa.poetmusic.server
  */
 object Markdown {
 
-    // Compiled once. These used to be built inline, which meant a fresh
-    // Regex per line for the list patterns (they sit inside the scan loops)
-    // and four more per paragraph in inline().
-    private val RE_HEADING = Regex("^(#{1,6})\\s+(.*)$")
-    private val RE_UL = Regex("^[-*+]\\s+")
-    private val RE_OL = Regex("^\\d+\\.\\s+")
-    private val RE_CODE = Regex("`([^`]+)`")
-    private val RE_LINK = Regex("\\[([^\\]]+)]\\(([^)\\s]+)\\)")
-    private val RE_BOLD = Regex("\\*\\*([^*]+)\\*\\*")
-    private val RE_ITALIC = Regex("(?<!\\*)\\*(?!\\*)([^*]+)\\*(?!\\*)")
-
     fun render(md: String): String {
         val out = StringBuilder("""<div class="md">""")
         val lines = md.replace("\r\n", "\n").split("\n")
@@ -59,7 +48,7 @@ object Markdown {
             }
 
             // heading
-            val heading = RE_HEADING.find(trimmed)
+            val heading = Regex("^(#{1,6})\\s+(.*)$").find(trimmed)
             if (heading != null) {
                 flushParagraph()
                 val level = heading.groupValues[1].length
@@ -79,11 +68,11 @@ object Markdown {
             }
 
             // unordered list
-            if (RE_UL.containsMatchIn(trimmed)) {
+            if (Regex("^[-*+]\\s+").containsMatchIn(trimmed)) {
                 flushParagraph()
                 out.append("<ul>")
-                while (i < lines.size && RE_UL.containsMatchIn(lines[i].trim())) {
-                    val item = lines[i].trim().replaceFirst(RE_UL, "")
+                while (i < lines.size && Regex("^[-*+]\\s+").containsMatchIn(lines[i].trim())) {
+                    val item = lines[i].trim().replaceFirst(Regex("^[-*+]\\s+"), "")
                     out.append("<li>").append(inline(item)).append("</li>"); i++
                 }
                 out.append("</ul>")
@@ -91,11 +80,11 @@ object Markdown {
             }
 
             // ordered list
-            if (RE_OL.containsMatchIn(trimmed)) {
+            if (Regex("^\\d+\\.\\s+").containsMatchIn(trimmed)) {
                 flushParagraph()
                 out.append("<ol>")
-                while (i < lines.size && RE_OL.containsMatchIn(lines[i].trim())) {
-                    val item = lines[i].trim().replaceFirst(RE_OL, "")
+                while (i < lines.size && Regex("^\\d+\\.\\s+").containsMatchIn(lines[i].trim())) {
+                    val item = lines[i].trim().replaceFirst(Regex("^\\d+\\.\\s+"), "")
                     out.append("<li>").append(inline(item)).append("</li>"); i++
                 }
                 out.append("</ol>")
@@ -118,9 +107,9 @@ object Markdown {
     private fun inline(raw: String): String {
         var s = esc(raw)
         // `code`
-        s = RE_CODE.replace(s) { "<code>${it.groupValues[1]}</code>" }
+        s = Regex("`([^`]+)`").replace(s) { "<code>${it.groupValues[1]}</code>" }
         // [label](url)
-        s = RE_LINK.replace(s) { m ->
+        s = Regex("\\[([^\\]]+)]\\(([^)\\s]+)\\)").replace(s) { m ->
             val label = m.groupValues[1]
             val url = m.groupValues[2]
             if (url.startsWith("http://") || url.startsWith("https://"))
@@ -128,9 +117,9 @@ object Markdown {
             else label
         }
         // **bold**
-        s = RE_BOLD.replace(s) { "<strong>${it.groupValues[1]}</strong>" }
+        s = Regex("\\*\\*([^*]+)\\*\\*").replace(s) { "<strong>${it.groupValues[1]}</strong>" }
         // *italic*
-        s = RE_ITALIC.replace(s) { "<em>${it.groupValues[1]}</em>" }
+        s = Regex("(?<!\\*)\\*(?!\\*)([^*]+)\\*(?!\\*)").replace(s) { "<em>${it.groupValues[1]}</em>" }
         return s
     }
 }

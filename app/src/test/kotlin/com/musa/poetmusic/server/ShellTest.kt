@@ -1,6 +1,5 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.data.AppSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,7 +13,7 @@ import org.junit.Test
 class ShellTest {
 
     private fun page(accent: String = "#b9a5ec", theme: String = "Lavender", dark: Boolean = false) =
-        Shell.page(AppSettings(accent, theme, dark), folderCount = 0)
+        Shell.page(accent, theme, folderCount = 0, dark = dark)
 
     @Test
     fun `page links the external stylesheet and script`() {
