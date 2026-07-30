@@ -1,5 +1,7 @@
 package com.musa.poetmusic.server
 
+import com.musa.poetmusic.data.AppSettings
+
 /**
  * The single-page shell: the htmx runtime, the persistent header + bottom
  * media tray, and the theme variables. The Poet design-system CSS and the
@@ -13,8 +15,9 @@ object Shell {
     val CANVAS_TINTS = mapOf("Lavender" to "#f2effa", "Cream" to "#faf5ec", "Sage" to "#eff6f0")
     val ACCENTS = listOf("#b9a5ec", "#9fd8c0", "#f4b89a", "#a5c9ec")
 
-    fun page(accent: String, theme: String, folderCount: Int, dark: Boolean): String {
-        val bg = CANVAS_TINTS[theme] ?: CANVAS_TINTS.getValue("Lavender")
+    fun page(settings: AppSettings, folderCount: Int): String {
+        val (accent, theme, dark) = settings
+        val bg = CANVAS_TINTS[theme] ?: CANVAS_TINTS.getValue(AppSettings.DEFAULT_THEME)
         return """<!DOCTYPE html>
 <html lang="en"${if (dark) """ data-theme="dark"""" else ""}>
 <head>
