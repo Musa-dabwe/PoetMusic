@@ -25,26 +25,22 @@ import java.util.concurrent.TimeUnit
  * the current item.
  *
  * Shuffle modes exposed to the UI:
- *   0 = off (natural order)
+ *   0 = off (play in order)
  *   1 = shuffle songs (Fisher-Yates over the whole queue)
- *   2 = shuffle albums (random album order, tracks in order within each)
  *
  * Repeat modes exposed to the UI:
- *   0 = off (play queue through, then stop)
  *   1 = repeat one song
- *   2 = repeat playlist
+ *   2 = repeat playlist (the base state — there is no "off")
  *   3 = play single song and stop
  */
 object PlayerController {
 
-    const val REPEAT_OFF = 0
     const val REPEAT_ONE = 1
     const val REPEAT_ALL = 2
     const val REPEAT_ONE_STOP = 3
 
     const val SHUFFLE_OFF = 0
     const val SHUFFLE_SONGS = 1
-    const val SHUFFLE_ALBUMS = 2
 
     data class Snapshot(
         val trackId: Long = -1,
@@ -54,7 +50,7 @@ object PlayerController {
         val durationMs: Long = 0,
         val playing: Boolean = false,
         val shuffleMode: Int = SHUFFLE_OFF,
-        val repeatMode: Int = REPEAT_OFF,
+        val repeatMode: Int = REPEAT_ALL,
         val speed: Float = 1f,
         val hasQueue: Boolean = false,
         val sleepRemainingMs: Long = -1,
@@ -120,6 +116,9 @@ object PlayerController {
 
     fun attach(p: ExoPlayer) {
         player = p
+        // Repeat playlist is the base state: a fresh player would otherwise sit
+        // in REPEAT_MODE_OFF ("play through"), a mode the UI no longer exposes.
+        p.repeatMode = Player.REPEAT_MODE_ALL
         // Count song completions for the after-N-songs sleep timer. A repeat
         // of the same song counts as a song; user-initiated skips don't.
         p.addListener(object : Player.Listener {
@@ -158,8 +157,7 @@ object PlayerController {
         if (p.pauseAtEndOfMediaItems && p.repeatMode == Player.REPEAT_MODE_OFF) REPEAT_ONE_STOP
         else when (p.repeatMode) {
             Player.REPEAT_MODE_ONE -> REPEAT_ONE
-            Player.REPEAT_MODE_ALL -> REPEAT_ALL
-            else -> REPEAT_OFF
+            else -> REPEAT_ALL
         }
 
     private fun refreshSnapshot() {
@@ -243,8 +241,8 @@ object PlayerController {
     fun restoreState(db: MusicDatabase) {
         bindStore(db)
         val saved = persistedQueue(db) ?: return
-        val shuffle = db.getSetting("pb_shuffle", "0").toIntOrNull()?.coerceIn(SHUFFLE_OFF, SHUFFLE_ALBUMS) ?: SHUFFLE_OFF
-        val repeat = db.getSetting("pb_repeat", "0").toIntOrNull() ?: REPEAT_OFF
+        val shuffle = db.getSetting("pb_shuffle", "0").toIntOrNull()?.coerceIn(SHUFFLE_OFF, SHUFFLE_SONGS) ?: SHUFFLE_OFF
+        val repeat = db.getSetting("pb_repeat", "$REPEAT_ALL").toIntOrNull() ?: REPEAT_ALL
         val speed = db.getSetting("pb_speed", "1.0").toFloatOrNull() ?: 1f
         val master = db.getSetting("pb_master", "").split(',').mapNotNull { it.toLongOrNull() }
         val source = db.getSetting("pb_source", "your library")
@@ -427,7 +425,7 @@ object PlayerController {
         handler.post {
             try {
                 player?.let { p ->
-                    applyShuffleMode(p, (shuffleMode + 1).mod(3))
+                    applyShuffleMode(p, (shuffleMode + 1).mod(2))
                     refreshSnapshot()
                     result = shuffleMode
                 }
@@ -440,30 +438,15 @@ object PlayerController {
     }
 
     /**
-     * Stable album identity for group shuffle: title + album artist, so two
-     * albums that share a title stay separate; a track with no album tag is
-     * its own group rather than part of one giant "" pseudo-album.
-     */
-    private fun albumKey(item: MediaItem): String {
-        val album = item.mediaMetadata.albumTitle?.toString().orEmpty()
-        if (album.isEmpty()) return "track:${item.mediaId}"
-        return album + "\u0000" + (item.mediaMetadata.albumArtist?.toString().orEmpty())
-    }
-
-    /**
      * Rewrite the queue for [mode] without interrupting the current song:
      *   SHUFFLE_OFF    — restore the master order around the current song;
      *                    play-next insertions that aren't part of the master
      *                    list keep their relative order at the end.
      *   SHUFFLE_SONGS  — [current song] + a static random sequence of
      *                    everything else.
-     *   SHUFFLE_ALBUMS — [current song] + the rest of its album in master
-     *                    order, then the remaining albums in random order,
-     *                    each album's tracks in master order (Musicolet's
-     *                    group shuffle).
-     */
+         */
     private fun applyShuffleMode(p: ExoPlayer, mode: Int) {
-        val target = mode.coerceIn(SHUFFLE_OFF, SHUFFLE_ALBUMS)
+        val target = mode.coerceIn(SHUFFLE_OFF, SHUFFLE_SONGS)
         if (target == shuffleMode) return
         val count = p.mediaItemCount
         if (count == 0) { shuffleMode = target; return }
@@ -474,14 +457,6 @@ object PlayerController {
         p.removeMediaItems(0, cur)
         when (target) {
             SHUFFLE_SONGS -> p.addMediaItems(items.filterIndexed { i, _ -> i != cur }.shuffled())
-            SHUFFLE_ALBUMS -> {
-                val groups = items.filterIndexed { i, _ -> i != cur }
-                    .sortedBy { rank[it.mediaId] ?: Int.MAX_VALUE }
-                    .groupBy(::albumKey)
-                val curAlbum = albumKey(items[cur])
-                val restAlbums = groups.keys.filter { it != curAlbum }.shuffled()
-                p.addMediaItems(groups[curAlbum].orEmpty() + restAlbums.flatMap { groups.getValue(it) })
-            }
             else -> {
                 val master = items.sortedBy { rank[it.mediaId] ?: Int.MAX_VALUE }
                 val k = master.indexOfFirst { it === items[cur] }
@@ -530,9 +505,10 @@ object PlayerController {
     private fun applyRepeatCode(p: ExoPlayer, code: Int) {
         when (code) {
             REPEAT_ONE -> { p.repeatMode = Player.REPEAT_MODE_ONE; p.pauseAtEndOfMediaItems = false }
-            REPEAT_ALL -> { p.repeatMode = Player.REPEAT_MODE_ALL; p.pauseAtEndOfMediaItems = false }
             REPEAT_ONE_STOP -> { p.repeatMode = Player.REPEAT_MODE_OFF; p.pauseAtEndOfMediaItems = true }
-            else -> { p.repeatMode = Player.REPEAT_MODE_OFF; p.pauseAtEndOfMediaItems = false }
+            // REPEAT_ALL, plus any stale persisted "off" code from before the
+            // play-queue-through state was removed.
+            else -> { p.repeatMode = Player.REPEAT_MODE_ALL; p.pauseAtEndOfMediaItems = false }
         }
     }
 
@@ -556,12 +532,11 @@ object PlayerController {
         return result
     }
 
-    /** off → repeat playlist → repeat one → play single & stop → off */
+    /** repeat playlist → repeat one → play single & stop → repeat playlist */
     private fun nextRepeatCode(code: Int): Int = when (code) {
-        REPEAT_OFF -> REPEAT_ALL
         REPEAT_ALL -> REPEAT_ONE
         REPEAT_ONE -> REPEAT_ONE_STOP
-        else -> REPEAT_OFF
+        else -> REPEAT_ALL
     }
 
     fun cycleSpeed() = onMain { p ->
