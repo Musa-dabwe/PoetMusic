@@ -30,6 +30,9 @@ html[data-theme="dark"] {
   --card-border-strong: rgba(255,255,255,0.3);
   --grabber: rgba(255,255,255,0.18);
   --shadow-card: rgba(0,0,0,0.45);
+  /* the light accent shadow is the accent at 50% alpha, which reads as a
+     colored halo over the dark canvas rather than a lift; neutral instead */
+  --accent-shadow: rgba(0,0,0,0.5);
   --track-empty: rgba(255,255,255,0.16);
   --panel-strong: #26262e;
   --panel-strong-text: #f0f0f5;

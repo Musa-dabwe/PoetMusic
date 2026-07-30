@@ -459,7 +459,11 @@ function setAccent(c) {
   r.setProperty('--accent', c);
   r.setProperty('--accent-faint', c + '2e');
   r.setProperty('--accent-soft', c + '66');
-  r.setProperty('--accent-shadow', c + '80');
+  /* --accent-shadow is rethemed to a neutral in dark mode, so pinning the
+     accent-tinted value inline here would outrank the stylesheet and bring
+     the halo back (same hazard as --bg in setTheme). */
+  if (window.POET.dark) r.removeProperty('--accent-shadow');
+  else r.setProperty('--accent-shadow', c + '80');
   window.POET.accent = c;
   fetch('/api/settings/accent', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'c=' + encodeURIComponent(c) });
   document.querySelectorAll('.swatch').forEach(function (s) { s.classList.toggle('on', s.getAttribute('data-c') === c); });
@@ -480,11 +484,14 @@ function setDark(on) {
   var root = document.documentElement;
   if (on) {
     root.setAttribute('data-theme', 'dark');
-    /* drop the inline light canvas tint so the dark --bg rule applies */
+    /* drop the inline light canvas tint so the dark --bg rule applies, and
+       likewise the accent-tinted shadow so the dark neutral one applies */
     root.style.removeProperty('--bg');
+    root.style.removeProperty('--accent-shadow');
   } else {
     root.removeAttribute('data-theme');
     if (window.POET.themeBg) root.style.setProperty('--bg', window.POET.themeBg);
+    if (window.POET.accent) root.style.setProperty('--accent-shadow', window.POET.accent + '80');
   }
   poetSyncStatusBar();
   fetch('/api/settings/dark', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'on=' + (on ? '1' : '0') });

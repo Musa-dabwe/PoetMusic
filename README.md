@@ -86,3 +86,38 @@ Licensed under the [Apache License 2.0](LICENSE).
 - Placeholder cover art: [Designed by rawpixel.com / Freepik](http://www.freepik.com).
   The original image was modified (cropped/resized) for in-app use, as permitted
   by the Freepik free license.
+
+---
+
+## Removing Blur & Glass Effects
+
+**Reference:** Full analysis in `docs/BigPickleAi.md`.
+
+### Files to Modify
+
+| File | Changes |
+|---|---|
+| `app/src/main/assets/web/poet.css` | Remove `backdrop-filter` and `-webkit-backdrop-filter` from 7 selectors (`.center-shield`, `.menu`, `.lyrics-deck`, `.sheet-shield`, `#tray`, `.queue-shield`, `#modal-root .modal-shield`). Delete the dark-mode override block (lines 43–46). |
+| `app/src/main/kotlin/com/musa/poetmusic/server/Shell.kt` | Update three glass variables (lines ~42–44) to opaque: `--card-glass: var(--card-bg)`, `--menu-glass: var(--card-bg)`, `--lyrics-glass: var(--card-bg)`. |
+
+### Steps
+
+1. In `poet.css`, delete every `backdrop-filter: blur(...)` and `-webkit-backdrop-filter: blur(...)` property.
+2. In `poet.css`, delete the `html[data-theme="dark"] ... { backdrop-filter: none; ... }` block (lines 43–46).
+3. In `Shell.kt`, replace the light-mode glass values with opaque equivalents matching `--card-bg` (`#ffffff` in light, `#1e1e24` in dark).
+4. Optional: Reduce shield overlay opacity from `rgba(59,54,81,0.35)` to `~0.25` since blur no longer softens the dim.
+5. Build and test in both light and dark mode. Verify no translucent backgrounds remain (they would look like transparency bugs).
+
+---
+
+## AI Review Instructions (Blur & Glass Effects)
+
+When reviewing this codebase for blur/glass effects, an AI should:
+
+1. **Search `poet.css`** for `backdrop-filter` and `-webkit-backdrop-filter`. List every selector, its blur radius, and line number.
+2. **Search `Shell.kt`** for `--*-glass` variable definitions. List each variable, its light-mode value, dark-mode value, and which CSS selector consumes it.
+3. **Cross-reference:** Every glass variable consumer must either have a `backdrop-filter` (light mode) or be opaque (dark mode). Flag any consumer that uses a translucent glass var without a blur.
+4. **Verify the dark-mode override block** (poet.css lines 43–46) covers all blur selectors exactly once.
+5. **Check server-rendered views** (`Views*.kt`) for any inline `style="backdrop-filter:..."` or `style="filter: blur(...)"`.
+6. **Note known exceptions:** `#tip-shield` intentionally has no blur (poet.css:378–380). The `box-shadow` on the 10 `--accent-shadow` consumers is not a backdrop-filter leak; it read as a colored glow in dark mode until `--accent-shadow` was rethemed to a neutral there (see `docs/BigPickleAi.md` §11a).
+7. **Report** findings in the format of `docs/BigPickleAi.md`.
