@@ -7,7 +7,7 @@ package com.musa.poetmusic.server
  * paragraphs, and the inline spans `**bold**`, `*italic*`, `` `code` `` and
  * `[label](url)`. All text is HTML-escaped before inline spans are applied,
  * so document content can never inject markup. Output is styled by the `.md`
- * rules in Shell so it follows the active (light / dark) theme.
+ * rules in assets/web/poet.css so it follows the active (light / dark) theme.
  */
 object Markdown {
 

@@ -45,3 +45,16 @@ fun artColor(key: Long): String = PASTEL_ARTS[((key % PASTEL_ARTS.size) + PASTEL
 
 /** URL-encode a query value. */
 fun enc(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")
+
+/**
+ * Parse a comma-separated list of track ids, dropping anything that isn't a
+ * number. Views interpolate the id string straight into HTML attributes and
+ * inline JS (`onclick="poetAddPlaylists('…')"`), so routes must rebuild that
+ * string from this parsed list rather than echoing the raw query value —
+ * [idsParam] is the canonical way to do it.
+ */
+fun parseIds(raw: String): List<Long> =
+    raw.split(",").mapNotNull { it.trim().toLongOrNull() }
+
+/** Render a parsed id list back into a query-safe "1,2,3" string. */
+fun idsParam(ids: List<Long>): String = ids.joinToString(",")

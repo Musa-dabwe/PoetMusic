@@ -121,41 +121,41 @@ object PoetServer {
                     val q = call.request.queryParameters["q"] ?: ""
                     val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
                         ?: db.getSetting("lib_sort", "title")
-                    call.respondText(Views.libraryScreen(db, tab, q, sort), ContentType.Text.Html)
+                    call.respondText(LibraryViews.libraryScreen(db, tab, q, sort), ContentType.Text.Html)
                 }
 
                 get("/screens/now-playing") {
                     val lyricsOpen = call.request.queryParameters["lyrics"] == "1"
-                    call.respondText(Views.nowPlayingScreen(db, lyricsOpen), ContentType.Text.Html)
+                    call.respondText(NowPlayingViews.nowPlayingScreen(db, lyricsOpen), ContentType.Text.Html)
                 }
 
                 get("/screens/settings") {
                     val tip = call.request.queryParameters["tip"] == "1"
-                    call.respondText(Views.settingsScreen(db, tip), ContentType.Text.Html)
+                    call.respondText(SettingsViews.settingsScreen(db, tip), ContentType.Text.Html)
                 }
 
                 get("/screens/about") {
-                    call.respondText(Views.aboutScreen(db), ContentType.Text.Html)
+                    call.respondText(SettingsViews.aboutScreen(db), ContentType.Text.Html)
                 }
 
                 get("/screens/album") {
                     val album = call.request.queryParameters["album"] ?: ""
                     val artist = call.request.queryParameters["artist"] ?: ""
-                    call.respondText(Views.albumScreen(db, album, artist), ContentType.Text.Html)
+                    call.respondText(LibraryViews.albumScreen(db, album, artist), ContentType.Text.Html)
                 }
 
                 get("/screens/artist") {
                     val name = call.request.queryParameters["name"] ?: ""
-                    call.respondText(Views.artistScreen(db, name), ContentType.Text.Html)
+                    call.respondText(LibraryViews.artistScreen(db, name), ContentType.Text.Html)
                 }
 
                 get("/screens/favorites") {
-                    call.respondText(Views.favoritesScreen(db), ContentType.Text.Html)
+                    call.respondText(LibraryViews.favoritesScreen(db), ContentType.Text.Html)
                 }
 
                 get("/screens/playlist/{id}") {
                     val id = call.parameters["id"]?.toLongOrNull() ?: 0
-                    call.respondText(Views.playlistScreen(db, id), ContentType.Text.Html)
+                    call.respondText(LibraryViews.playlistScreen(db, id), ContentType.Text.Html)
                 }
 
                 // ---------- partials ----------
@@ -165,12 +165,12 @@ object PoetServer {
                     val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
                         ?: db.getSetting("lib_sort", "title")
                     val ctx = QueueCtx("songs", q, sort)
-                    call.respondText(Views.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                    call.respondText(SharedViews.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
                 }
 
                 get("/partial/queue") {
                     val items = PlayerController.queueItems()
-                    call.respondText(Views.queuePanel(db, items, PlayerController.snapshot.playing), ContentType.Text.Html)
+                    call.respondText(QueueViews.queuePanel(db, items, PlayerController.snapshot.playing), ContentType.Text.Html)
                 }
 
                 get("/partial/queue-body") {
@@ -178,15 +178,15 @@ object PoetServer {
                 }
 
                 get("/partial/scan") {
-                    call.respondText(Views.scanCard(db), ContentType.Text.Html)
+                    call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
                 }
 
                 get("/partial/sleep-menu") {
-                    call.respondText(Views.sleepDrawer(), ContentType.Text.Html)
+                    call.respondText(NowPlayingViews.sleepDrawer(), ContentType.Text.Html)
                 }
 
                 get("/partial/sort-drawer") {
-                    call.respondText(Views.sortDrawer(db.getSetting("lib_sort", "title")), ContentType.Text.Html)
+                    call.respondText(LibraryViews.sortDrawer(db.getSetting("lib_sort", "title")), ContentType.Text.Html)
                 }
 
                 /** Empty fragment: swapped into overlay roots to close them. */
@@ -198,19 +198,19 @@ object PoetServer {
                     val id = call.parameters["id"]?.toLongOrNull()
                     val folder = db.folders().firstOrNull { it.id == id }
                         ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.confirmRemoveFolder(folder.id, folder.displayPath), ContentType.Text.Html)
+                    call.respondText(DrawerViews.confirmRemoveFolder(folder.id, folder.displayPath), ContentType.Text.Html)
                 }
 
                 get("/partial/confirm-track/{id}") {
                     val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
                         ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.confirmRemoveTrack(t), ContentType.Text.Html)
+                    call.respondText(DrawerViews.confirmRemoveTrack(t), ContentType.Text.Html)
                 }
 
                 get("/partial/confirm-playlist/{id}") {
                     val pl = call.parameters["id"]?.toLongOrNull()?.let(db::playlist)
                         ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.confirmDeletePlaylist(pl), ContentType.Text.Html)
+                    call.respondText(DrawerViews.confirmDeletePlaylist(pl), ContentType.Text.Html)
                 }
 
                 // ---------- player API ----------
@@ -304,13 +304,13 @@ object PoetServer {
                    of waiting for the poller. */
                 post("/api/player/shuffle") {
                     val mode = PlayerController.advanceShuffleMode()
-                    call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(Views.shuffleTitle(mode))}}""")
-                    call.respondText(Views.shuffleButton(mode), ContentType.Text.Html)
+                    call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(NowPlayingViews.shuffleTitle(mode))}}""")
+                    call.respondText(NowPlayingViews.shuffleButton(mode), ContentType.Text.Html)
                 }
                 post("/api/player/repeat") {
                     val mode = PlayerController.advanceRepeatMode()
-                    call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(Views.repeatTitle(mode))}}""")
-                    call.respondText(Views.repeatButton(mode), ContentType.Text.Html)
+                    call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(NowPlayingViews.repeatTitle(mode))}}""")
+                    call.respondText(NowPlayingViews.repeatButton(mode), ContentType.Text.Html)
                 }
                 post("/api/player/speed") { PlayerController.cycleSpeed(); noContent() }
 
@@ -337,27 +337,30 @@ object PoetServer {
                     val s = PlayerController.snapshot
                     val track = if (s.trackId >= 0) db.track(s.trackId) else null
                     val lines = track?.lrcUri?.let { LrcParser.parse(app, it) } ?: emptyList()
-                    call.respondText(Views.lyricsDeckHtml(lines), ContentType.Text.Html)
+                    call.respondText(NowPlayingViews.lyricsDeckHtml(lines), ContentType.Text.Html)
                 }
 
                 // ---------- library / menus ----------
 
-                /** Full options drawer for one track (single ⋯) or a batch selection. */
+                /** Full options drawer for one track (single ⋯) or a batch selection.
+                 *  The ids string handed to the view is rebuilt from the parsed
+                 *  numeric list, never the raw query value: it is interpolated
+                 *  into attributes and inline JS downstream. */
                 get("/api/library/drawer") {
-                    val idsRaw = call.request.queryParameters["ids"] ?: ""
-                    val tracks = idList(idsRaw).mapNotNull(db::track)
+                    val ids = idList(call.request.queryParameters["ids"] ?: "")
+                    val tracks = ids.mapNotNull(db::track)
                     if (tracks.isEmpty()) return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(Views.optionsDrawer(db, tracks, idsRaw, queueCtx()), ContentType.Text.Html)
+                    call.respondText(DrawerViews.optionsDrawer(db, tracks, idsParam(ids), queueCtx()), ContentType.Text.Html)
                 }
 
                 /** Drawer sub-sheets: add-to-playlist, set-as, info, delete. */
                 get("/api/library/sub") {
                     val kind = call.request.queryParameters["kind"] ?: ""
-                    val idsRaw = call.request.queryParameters["ids"] ?: ""
-                    val tracks = idList(idsRaw).mapNotNull(db::track)
+                    val ids = idList(call.request.queryParameters["ids"] ?: "")
+                    val tracks = ids.mapNotNull(db::track)
                     if (tracks.isEmpty()) return@get call.respondText("", ContentType.Text.Html)
                     val infoSize = if (kind == "info") fileSize(app, tracks.first().uri) else -1L
-                    call.respondText(Views.subSheet(kind, db, tracks, idsRaw, queueCtx(), infoSize), ContentType.Text.Html)
+                    call.respondText(DrawerViews.subSheet(kind, db, tracks, idsParam(ids), queueCtx(), infoSize), ContentType.Text.Html)
                 }
 
                 // ---------- batch track actions (single ⋯ or multi-select) ----------
@@ -433,21 +436,21 @@ object PoetServer {
                  */
                 get("/api/library/sort") {
                     val type = call.request.queryParameters["type"] ?: "title-az"
-                    val sort = Views.SORT_STATES.firstOrNull { it.first == type }?.second ?: "title"
+                    val sort = LibraryViews.SORT_STATES.firstOrNull { it.first == type }?.second ?: "title"
                     db.setSetting("lib_sort", sort)
                     val q = call.request.queryParameters["q"] ?: ""
                     val ctx = QueueCtx("songs", q, sort)
-                    call.respondText(Views.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                    call.respondText(SharedViews.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
                 }
 
                 post("/api/library/scan") {
                     if (db.folders().isEmpty()) {
                         call.response.header("HX-Trigger", """{"poet-toast":"Add a music folder first"}""")
-                        call.respondText(Views.scanCard(db), ContentType.Text.Html)
+                        call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
                         return@post
                     }
                     LibraryScanner.startScan(app, db)
-                    call.respondText(Views.scanCard(db), ContentType.Text.Html)
+                    call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
                 }
 
                 // ---------- tracks ----------
@@ -466,7 +469,7 @@ object PoetServer {
                     TagEditor.clearPendingArt()
                     val extras = TagEditor.readFileExtras(app, t)
                     val isCurrent = PlayerController.snapshot.trackId == t.id
-                    call.respondText(Views.tagEditorSheet(t, extras, isCurrent), ContentType.Text.Html)
+                    call.respondText(TagEditorViews.tagEditorSheet(t, extras, isCurrent), ContentType.Text.Html)
                 }
 
                 put("/api/library/edit-tags/{id}") {
@@ -679,7 +682,7 @@ object PoetServer {
 
     /** Re-rendered inner content of the queue panel (#qp-body). */
     private fun queueBody(db: MusicDatabase): String =
-        Views.queuePanelBody(db, PlayerController.queueItems(), PlayerController.snapshot.playing)
+        QueueViews.queuePanelBody(db, PlayerController.queueItems(), PlayerController.snapshot.playing)
 
     /** Human label for the listing a queue was built from ("Playing from …"). */
     private fun sourceLabel(db: MusicDatabase, ctx: QueueCtx): String = when (ctx.ctx) {
@@ -690,9 +693,8 @@ object PoetServer {
         else -> if (ctx.q.isNotBlank()) "search “${ctx.q}”" else "All songs"
     }
 
-    /** Parse a comma-separated list of track ids. */
-    private fun idList(raw: String): List<Long> =
-        raw.split(",").mapNotNull { it.trim().toLongOrNull() }
+    /** Parse a comma-separated list of track ids (see [parseIds]). */
+    private fun idList(raw: String): List<Long> = parseIds(raw)
 
     /** Comma-separated ids from the "ids" query parameter. */
     private fun PipelineContext<Unit, ApplicationCall>.idList(): List<Long> =

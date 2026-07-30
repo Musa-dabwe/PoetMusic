@@ -12,14 +12,29 @@ android {
         applicationId = "com.musa.poetmusic"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Single source of truth lives in gradle/libs.versions.toml so the
+        // version isn't buried in the build script.
+        versionCode = libs.versions.appVersionCode.get().toInt()
+        versionName = libs.versions.appVersionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    buildTypes {
+        release {
+            // Minification stays off: Ktor/CIO and Media3 resolve plenty by
+            // reflection, and there is no on-device test pass to catch a bad
+            // shrink. proguard-rules.pro carries the keep rules needed the day
+            // this flips to true.
+            isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
     buildFeatures {
         viewBinding = true
+        // Exposes VERSION_NAME so the About screen can't drift from the build.
+        buildConfig = true
     }
 
     compileOptions {
@@ -59,4 +74,5 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.mp3agic)
     implementation(libs.slf4j.nop)
+    testImplementation(libs.junit)
 }
