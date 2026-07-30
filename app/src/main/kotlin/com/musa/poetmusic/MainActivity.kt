@@ -21,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.musa.poetmusic.data.AppSettings
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.TagEditor
 import com.musa.poetmusic.playback.PlaybackService
@@ -96,10 +97,9 @@ class MainActivity : AppCompatActivity() {
      * contrast (dark icons on light, light icons on dark) by luminance.
      */
     private fun applyStartupStatusBarColor() {
-        val db = (application as PoetApp).db
-        val dark = db.getSetting("dark", "0") == "1"
-        val tint = Shell.CANVAS_TINTS[db.getSetting("theme", "Lavender")] ?: "#f2effa"
-        applyStatusBarColor(if (dark) DARK_STATUS_BAR else tint)
+        val settings = AppSettings.from((application as PoetApp).db)
+        val tint = Shell.CANVAS_TINTS[settings.theme] ?: Shell.CANVAS_TINTS.getValue(AppSettings.DEFAULT_THEME)
+        applyStatusBarColor(if (settings.dark) DARK_STATUS_BAR else tint)
     }
 
     /** Hand the server the native capabilities it cannot reach on its own. */

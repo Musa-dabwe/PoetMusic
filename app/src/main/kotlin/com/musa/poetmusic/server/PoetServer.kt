@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import com.musa.poetmusic.data.AppSettings
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.LrcParser
 import com.musa.poetmusic.data.MusicDatabase
@@ -47,55 +48,27 @@ object PoetServer {
 
     private var started = false
 
-    /** In-memory LRU for extracted album art, bounded by bytes rather than
-     *  entry count so a run of high-res covers can't balloon the heap. */
-    private const val ART_CACHE_MAX_BYTES = 12 * 1024 * 1024
-    private var artCacheBytes = 0L
-    private val artCache = LinkedHashMap<Long, ByteArray>(16, 0.75f, true)
-
-    /** Drop a track's cached cover so the next request re-extracts it (after a tag edit). */
-    private fun artCacheEvict(id: Long) = synchronized(artCache) {
-        artCache.remove(id)?.let { artCacheBytes -= it.size }
-    }
-
-    private fun artCachePut(id: Long, art: ByteArray) = synchronized(artCache) {
-        // Oversized covers would evict everything else; serve them uncached.
-        if (art.size > ART_CACHE_MAX_BYTES / 4) return@synchronized
-        artCache.remove(id)?.let { artCacheBytes -= it.size }
-        artCache[id] = art
-        artCacheBytes += art.size
-        val eldest = artCache.entries.iterator()
-        while (artCacheBytes > ART_CACHE_MAX_BYTES && eldest.hasNext()) {
-            artCacheBytes -= eldest.next().value.size
-            eldest.remove()
-        }
-    }
-
-    /** Branded cover shown for tracks with no embedded artwork. */
-    private var placeholderArt: ByteArray? = null
+    /** Compiled once rather than per request: these guard hot-ish routes. */
+    private val RE_ASSET_NAME = Regex("[A-Za-z0-9._-]+")
+    private val RE_HEX_COLOR = Regex("#[0-9a-fA-F]{6}")
 
     @Synchronized
     fun start(context: Context, db: MusicDatabase) {
         if (started) return
         started = true
         val app = context.applicationContext
-        placeholderArt = runCatching {
-            app.assets.open("web/placeholder.jpg").use { it.readBytes() }
-        }.getOrNull()
+        ArtCache.loadPlaceholder(app.assets)
 
         embeddedServer(CIO, port = 8080, host = "127.0.0.1") {
             routing {
 
                 get("/") {
-                    val accent = db.getSetting("accent", "#b9a5ec")
-                    val theme = db.getSetting("theme", "Lavender")
-                    val dark = db.getSetting("dark", "0") == "1"
-                    call.respondText(Shell.page(accent, theme, db.folders().size, dark), ContentType.Text.Html)
+                    html(Shell.page(AppSettings.from(db), db.folders().size))
                 }
 
                 get("/assets/{name}") {
                     val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.NotFound)
-                    if (!name.matches(Regex("[A-Za-z0-9._-]+"))) return@get call.respond(HttpStatusCode.NotFound)
+                    if (!name.matches(RE_ASSET_NAME)) return@get call.respond(HttpStatusCode.NotFound)
                     val type = when {
                         name.endsWith(".js") -> ContentType.parse("application/javascript")
                         name.endsWith(".woff2") -> ContentType.parse("font/woff2")
@@ -121,41 +94,41 @@ object PoetServer {
                     val q = call.request.queryParameters["q"] ?: ""
                     val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
                         ?: db.getSetting("lib_sort", "title")
-                    call.respondText(LibraryViews.libraryScreen(db, tab, q, sort), ContentType.Text.Html)
+                    html(LibraryViews.libraryScreen(db, tab, q, sort))
                 }
 
                 get("/screens/now-playing") {
                     val lyricsOpen = call.request.queryParameters["lyrics"] == "1"
-                    call.respondText(NowPlayingViews.nowPlayingScreen(db, lyricsOpen), ContentType.Text.Html)
+                    html(NowPlayingViews.nowPlayingScreen(db, lyricsOpen))
                 }
 
                 get("/screens/settings") {
                     val tip = call.request.queryParameters["tip"] == "1"
-                    call.respondText(SettingsViews.settingsScreen(db, tip), ContentType.Text.Html)
+                    html(SettingsViews.settingsScreen(db, tip))
                 }
 
                 get("/screens/about") {
-                    call.respondText(SettingsViews.aboutScreen(db), ContentType.Text.Html)
+                    html(SettingsViews.aboutScreen(db))
                 }
 
                 get("/screens/album") {
                     val album = call.request.queryParameters["album"] ?: ""
                     val artist = call.request.queryParameters["artist"] ?: ""
-                    call.respondText(LibraryViews.albumScreen(db, album, artist), ContentType.Text.Html)
+                    html(LibraryViews.albumScreen(db, album, artist))
                 }
 
                 get("/screens/artist") {
                     val name = call.request.queryParameters["name"] ?: ""
-                    call.respondText(LibraryViews.artistScreen(db, name), ContentType.Text.Html)
+                    html(LibraryViews.artistScreen(db, name))
                 }
 
                 get("/screens/favorites") {
-                    call.respondText(LibraryViews.favoritesScreen(db), ContentType.Text.Html)
+                    html(LibraryViews.favoritesScreen(db))
                 }
 
                 get("/screens/playlist/{id}") {
                     val id = call.parameters["id"]?.toLongOrNull() ?: 0
-                    call.respondText(LibraryViews.playlistScreen(db, id), ContentType.Text.Html)
+                    html(LibraryViews.playlistScreen(db, id))
                 }
 
                 // ---------- partials ----------
@@ -165,59 +138,59 @@ object PoetServer {
                     val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
                         ?: db.getSetting("lib_sort", "title")
                     val ctx = QueueCtx("songs", q, sort)
-                    call.respondText(SharedViews.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                    html(SharedViews.songList(db.tracks(q, sort), ctx))
                 }
 
                 get("/partial/queue") {
                     val items = PlayerController.queueItems()
-                    call.respondText(QueueViews.queuePanel(db, items, PlayerController.snapshot.playing), ContentType.Text.Html)
+                    html(QueueViews.queuePanel(db, items, PlayerController.snapshot.playing))
                 }
 
                 get("/partial/queue-body") {
-                    call.respondText(queueBody(db), ContentType.Text.Html)
+                    html(queueBody(db))
                 }
 
                 get("/partial/scan") {
-                    call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
+                    html(SettingsViews.scanCard(db))
                 }
 
                 get("/partial/sleep-menu") {
-                    call.respondText(NowPlayingViews.sleepDrawer(), ContentType.Text.Html)
+                    html(NowPlayingViews.sleepDrawer())
                 }
 
                 get("/partial/sort-drawer") {
-                    call.respondText(LibraryViews.sortDrawer(db.getSetting("lib_sort", "title")), ContentType.Text.Html)
+                    html(LibraryViews.sortDrawer(db.getSetting("lib_sort", "title")))
                 }
 
                 /** Empty fragment: swapped into overlay roots to close them. */
                 get("/partial/empty") {
-                    call.respondText("", ContentType.Text.Html)
+                    emptyHtml()
                 }
 
                 get("/partial/confirm-folder/{id}") {
                     val id = call.parameters["id"]?.toLongOrNull()
                     val folder = db.folders().firstOrNull { it.id == id }
-                        ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(DrawerViews.confirmRemoveFolder(folder.id, folder.displayPath), ContentType.Text.Html)
+                        ?: return@get emptyHtml()
+                    html(DrawerViews.confirmRemoveFolder(folder.id, folder.displayPath))
                 }
 
                 get("/partial/confirm-track/{id}") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
-                        ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(DrawerViews.confirmRemoveTrack(t), ContentType.Text.Html)
+                    val t = trackParam(db)
+                        ?: return@get emptyHtml()
+                    html(DrawerViews.confirmRemoveTrack(t))
                 }
 
                 get("/partial/confirm-playlist/{id}") {
                     val pl = call.parameters["id"]?.toLongOrNull()?.let(db::playlist)
-                        ?: return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(DrawerViews.confirmDeletePlaylist(pl), ContentType.Text.Html)
+                        ?: return@get emptyHtml()
+                    html(DrawerViews.confirmDeletePlaylist(pl))
                 }
 
                 // ---------- player API ----------
 
                 get("/api/player/state") {
                     val s = PlayerController.snapshot
-                    val track = if (s.trackId >= 0) db.track(s.trackId) else null
+                    val track = currentTrack(db, s)
                     val fav = track?.favorite == true
                     val mod = track?.lastModified ?: 0
                     val json = """{"trackId":${s.trackId},"title":${jsonStr(s.title)},"artist":${jsonStr(s.artist)},""" +
@@ -246,13 +219,13 @@ object PoetServer {
                 }
 
                 post("/api/queue/next/{id}") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track) ?: return@post noContent()
+                    val t = trackParam(db) ?: return@post noContent()
                     PlayerController.playNext(t)
                     toast("Playing next: ${t.title}")
                 }
 
                 post("/api/queue/add/{id}") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track) ?: return@post noContent()
+                    val t = trackParam(db) ?: return@post noContent()
                     PlayerController.addToQueue(t)
                     toast("Added to queue: ${t.title}")
                 }
@@ -263,12 +236,12 @@ object PoetServer {
 
                 post("/api/queue/jump/{index}") {
                     call.parameters["index"]?.toIntOrNull()?.let(PlayerController::jumpTo)
-                    call.respondText(queueBody(db), ContentType.Text.Html)
+                    html(queueBody(db))
                 }
 
                 post("/api/queue/remove/{index}") {
                     call.parameters["index"]?.toIntOrNull()?.let(PlayerController::removeQueueItem)
-                    call.respondText(queueBody(db), ContentType.Text.Html)
+                    html(queueBody(db))
                 }
 
                 post("/api/queue/move") {
@@ -276,18 +249,16 @@ object PoetServer {
                     val from = p["from"]?.toIntOrNull()
                     val to = p["to"]?.toIntOrNull()
                     if (from != null && to != null) PlayerController.moveQueueItem(from, to)
-                    call.respondText(queueBody(db), ContentType.Text.Html)
+                    html(queueBody(db))
                 }
 
                 post("/api/queue/clear") {
                     PlayerController.clearUpcoming()
-                    call.respondText(queueBody(db), ContentType.Text.Html)
+                    html(queueBody(db))
                 }
 
                 post("/api/player/favourite") {
-                    val s = PlayerController.snapshot
-                    val t = if (s.trackId >= 0) db.track(s.trackId) else null
-                    if (t == null) return@post toast("Nothing is playing")
+                    val t = currentTrack(db) ?: return@post toast("Nothing is playing")
                     db.setFavorite(t.id, !t.favorite)
                     // The full-size widget shows the heart; keep it honest.
                     WidgetRenderer.pushUpdate(app)
@@ -305,12 +276,12 @@ object PoetServer {
                 post("/api/player/shuffle") {
                     val mode = PlayerController.advanceShuffleMode()
                     call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(NowPlayingViews.shuffleTitle(mode))}}""")
-                    call.respondText(NowPlayingViews.shuffleButton(mode), ContentType.Text.Html)
+                    html(NowPlayingViews.shuffleButton(mode))
                 }
                 post("/api/player/repeat") {
                     val mode = PlayerController.advanceRepeatMode()
                     call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(NowPlayingViews.repeatTitle(mode))}}""")
-                    call.respondText(NowPlayingViews.repeatButton(mode), ContentType.Text.Html)
+                    html(NowPlayingViews.repeatButton(mode))
                 }
                 post("/api/player/speed") { PlayerController.cycleSpeed(); noContent() }
 
@@ -334,10 +305,9 @@ object PoetServer {
                 }
 
                 get("/api/player/lyrics") {
-                    val s = PlayerController.snapshot
-                    val track = if (s.trackId >= 0) db.track(s.trackId) else null
+                    val track = currentTrack(db)
                     val lines = track?.lrcUri?.let { LrcParser.parse(app, it) } ?: emptyList()
-                    call.respondText(NowPlayingViews.lyricsDeckHtml(lines), ContentType.Text.Html)
+                    html(NowPlayingViews.lyricsDeckHtml(lines))
                 }
 
                 // ---------- library / menus ----------
@@ -347,20 +317,20 @@ object PoetServer {
                  *  numeric list, never the raw query value: it is interpolated
                  *  into attributes and inline JS downstream. */
                 get("/api/library/drawer") {
-                    val ids = idList(call.request.queryParameters["ids"] ?: "")
+                    val ids = idList()
                     val tracks = ids.mapNotNull(db::track)
-                    if (tracks.isEmpty()) return@get call.respondText("", ContentType.Text.Html)
-                    call.respondText(DrawerViews.optionsDrawer(db, tracks, idsParam(ids), queueCtx()), ContentType.Text.Html)
+                    if (tracks.isEmpty()) return@get emptyHtml()
+                    html(DrawerViews.optionsDrawer(db, tracks, idsParam(ids), queueCtx()))
                 }
 
                 /** Drawer sub-sheets: add-to-playlist, set-as, info, delete. */
                 get("/api/library/sub") {
                     val kind = call.request.queryParameters["kind"] ?: ""
-                    val ids = idList(call.request.queryParameters["ids"] ?: "")
+                    val ids = idList()
                     val tracks = ids.mapNotNull(db::track)
-                    if (tracks.isEmpty()) return@get call.respondText("", ContentType.Text.Html)
+                    if (tracks.isEmpty()) return@get emptyHtml()
                     val infoSize = if (kind == "info") fileSize(app, tracks.first().uri) else -1L
-                    call.respondText(DrawerViews.subSheet(kind, db, tracks, idsParam(ids), queueCtx(), infoSize), ContentType.Text.Html)
+                    html(DrawerViews.subSheet(kind, db, tracks, idsParam(ids), queueCtx(), infoSize))
                 }
 
                 // ---------- batch track actions (single ⋯ or multi-select) ----------
@@ -390,7 +360,7 @@ object PoetServer {
 
                 post("/api/tracks/add-playlists") {
                     val ids = idList()
-                    val pids = idList(call.request.queryParameters["pids"] ?: "")
+                    val pids = idList("pids")
                     if (ids.isEmpty() || pids.isEmpty()) return@post toast("No playlist selected")
                     pids.forEach { pid -> ids.forEach { tid -> db.addToPlaylist(pid, tid) } }
                     val songWord = if (ids.size == 1) "song" else "songs"
@@ -413,7 +383,7 @@ object PoetServer {
                             false
                         }
                         if (ok) {
-                            artCacheEvict(id)
+                            ArtCache.evict(id)
                             db.removeTrack(id)
                             deletedIds += id
                         } else failed++
@@ -440,36 +410,36 @@ object PoetServer {
                     db.setSetting("lib_sort", sort)
                     val q = call.request.queryParameters["q"] ?: ""
                     val ctx = QueueCtx("songs", q, sort)
-                    call.respondText(SharedViews.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                    html(SharedViews.songList(db.tracks(q, sort), ctx))
                 }
 
                 post("/api/library/scan") {
                     if (db.folders().isEmpty()) {
                         call.response.header("HX-Trigger", """{"poet-toast":"Add a music folder first"}""")
-                        call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
+                        html(SettingsViews.scanCard(db))
                         return@post
                     }
                     LibraryScanner.startScan(app, db)
-                    call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
+                    html(SettingsViews.scanCard(db))
                 }
 
                 // ---------- tracks ----------
 
                 post("/api/track/{id}/favorite") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track) ?: return@post noContent()
+                    val t = trackParam(db) ?: return@post noContent()
                     db.setFavorite(t.id, !t.favorite)
                     refresh(if (t.favorite) "Removed from favorites" else "Added to favorites")
                 }
 
                 get("/api/library/edit-tags/{id}") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
-                        ?: return@get call.respondText("", ContentType.Text.Html)
+                    val t = trackParam(db)
+                        ?: return@get emptyHtml()
                     // Opening the editor clears any leftover cover pick and reads
                     // the file-only fields (comment, embedded lyrics) for prefill.
                     TagEditor.clearPendingArt()
                     val extras = TagEditor.readFileExtras(app, t)
                     val isCurrent = PlayerController.snapshot.trackId == t.id
-                    call.respondText(TagEditorViews.tagEditorSheet(t, extras, isCurrent), ContentType.Text.Html)
+                    html(TagEditorViews.tagEditorSheet(t, extras, isCurrent))
                 }
 
                 put("/api/library/edit-tags/{id}") {
@@ -485,7 +455,7 @@ object PoetServer {
                     )
                     val result = TagEditor.saveTags(app, db, id, form)
                     if (result.artChanged) {
-                        artCacheEvict(id)
+                        ArtCache.evict(id)
                         WidgetRenderer.pushUpdate(app)
                     }
                     val artEvent = if (result.artChanged) ""","poet-art-changed":$id""" else ""
@@ -511,7 +481,7 @@ object PoetServer {
 
                 /** Export the synced-lyrics LRC built in the editor to a sidecar file. */
                 post("/api/tageditor/{id}/save-lrc") {
-                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track) ?: return@post noContent()
+                    val t = trackParam(db) ?: return@post noContent()
                     val lrc = call.receiveParameters()["lrc"] ?: ""
                     val result = TagEditor.saveLrc(app, db, t, lrc)
                     toast(result.message)
@@ -531,7 +501,7 @@ object PoetServer {
                     val pid = db.createPlaylist(name)
                     // Optionally seed the new playlist with the drawer's target tracks.
                     call.request.queryParameters["trackId"]?.toLongOrNull()?.let { db.addToPlaylist(pid, it) }
-                    idList(call.request.queryParameters["ids"] ?: "").forEach { db.addToPlaylist(pid, it) }
+                    idList().forEach { db.addToPlaylist(pid, it) }
                     refresh("Created playlist \"$name\"")
                 }
 
@@ -580,7 +550,7 @@ object PoetServer {
 
                 post("/api/settings/accent") {
                     val c = call.receiveParameters()["c"] ?: return@post noContent()
-                    if (c.matches(Regex("#[0-9a-fA-F]{6}"))) {
+                    if (c.matches(RE_HEX_COLOR)) {
                         db.setSetting("accent", c)
                         // Recolor the home screen widget in the same breath.
                         WidgetRenderer.pushUpdate(app)
@@ -616,7 +586,7 @@ object PoetServer {
 
                 get("/api/art/{id}") {
                     val id = call.parameters["id"]?.toLongOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
-                    val cached = synchronized(artCache) { artCache[id] }
+                    val cached = ArtCache.get(id)
                     if (cached != null) {
                         call.response.header("Cache-Control", "max-age=3600")
                         return@get call.respondBytes(cached, ContentType.parse("image/jpeg"))
@@ -634,9 +604,9 @@ object PoetServer {
                             runCatching { mmr.release() }
                         }
                     }
-                    val ph = placeholderArt
+                    val ph = ArtCache.placeholder
                     if (art != null) {
-                        artCachePut(id, art)
+                        ArtCache.put(id, art)
                         call.response.header("Cache-Control", "max-age=3600")
                         call.respondBytes(art, ContentType.parse("image/jpeg"))
                     } else if (ph != null) {
@@ -655,7 +625,7 @@ object PoetServer {
                 }
 
                 get("/api/stream/{id}") {
-                    val track = call.parameters["id"]?.toLongOrNull()?.let(db::track)
+                    val track = trackParam(db)
                         ?: return@get call.respond(HttpStatusCode.NotFound)
                     val mime = when (track.displayName.substringAfterLast('.', "").lowercase()) {
                         "mp3" -> "audio/mpeg"
@@ -678,66 +648,4 @@ object PoetServer {
         }.start(wait = false)
     }
 
-    // ---------- route helpers ----------
-
-    /** Re-rendered inner content of the queue panel (#qp-body). */
-    private fun queueBody(db: MusicDatabase): String =
-        QueueViews.queuePanelBody(db, PlayerController.queueItems(), PlayerController.snapshot.playing)
-
-    /** Human label for the listing a queue was built from ("Playing from …"). */
-    private fun sourceLabel(db: MusicDatabase, ctx: QueueCtx): String = when (ctx.ctx) {
-        "album" -> ctx.album.ifBlank { "Album" }
-        "artist" -> ctx.artist.ifBlank { "Artist" }
-        "playlist" -> db.playlist(ctx.pid)?.name ?: "Playlist"
-        "favorites" -> "Favorites"
-        else -> if (ctx.q.isNotBlank()) "search “${ctx.q}”" else "All songs"
-    }
-
-    /** Parse a comma-separated list of track ids (see [parseIds]). */
-    private fun idList(raw: String): List<Long> = parseIds(raw)
-
-    /** Comma-separated ids from the "ids" query parameter. */
-    private fun PipelineContext<Unit, ApplicationCall>.idList(): List<Long> =
-        idList(call.request.queryParameters["ids"] ?: "")
-
-    private fun PipelineContext<Unit, ApplicationCall>.queueCtx(): QueueCtx {
-        val p = call.request.queryParameters
-        return QueueCtx(
-            ctx = p["ctx"] ?: "songs",
-            q = p["q"] ?: "",
-            sort = p["sort"] ?: "title",
-            album = p["album"] ?: "",
-            artist = p["artist"] ?: "",
-            pid = p["pid"]?.toLongOrNull() ?: 0
-        )
-    }
-
-    private suspend fun PipelineContext<Unit, ApplicationCall>.noContent() {
-        call.respond(HttpStatusCode.NoContent)
-    }
-
-    private suspend fun PipelineContext<Unit, ApplicationCall>.toast(msg: String) {
-        call.response.header("HX-Trigger", """{"poet-toast":${jsonStr(msg)}}""")
-        call.respond(HttpStatusCode.NoContent)
-    }
-
-    /** Accent-colored pill toast, used for Now Playing state changes. */
-    private suspend fun PipelineContext<Unit, ApplicationCall>.toastAccent(msg: String) {
-        call.response.header("HX-Trigger", """{"poet-toast-accent":${jsonStr(msg)}}""")
-        call.respond(HttpStatusCode.NoContent)
-    }
-
-    /** File size in bytes for a SAF document uri, or -1 when unknown. */
-    private fun fileSize(context: Context, uri: String): Long = try {
-        context.contentResolver.query(Uri.parse(uri), arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
-            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L
-        } ?: -1L
-    } catch (e: Exception) {
-        -1L
-    }
-
-    private suspend fun PipelineContext<Unit, ApplicationCall>.refresh(msg: String) {
-        call.response.header("HX-Trigger", """{"poet-toast":${jsonStr(msg)},"poet-refresh":true}""")
-        call.respond(HttpStatusCode.NoContent)
-    }
 }

@@ -151,13 +151,10 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    fun folders(): List<MusicFolder> {
-        val out = mutableListOf<MusicFolder>()
+    fun folders(): List<MusicFolder> =
         readableDatabase.rawQuery("SELECT id, tree_uri, display_path FROM folders ORDER BY id", null).use { c ->
-            while (c.moveToNext()) out += MusicFolder(c.getLong(0), c.getString(1), c.getString(2))
+            c.mapAll { MusicFolder(it.getLong(0), it.getString(1), it.getString(2)) }
         }
-        return out
-    }
 
     // ---------- tracks ----------
 
@@ -204,6 +201,13 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         db.execSQL("DELETE FROM playlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)")
     }
 
+    /** Drain a cursor into a list. Callers still own closing it via `use`. */
+    private inline fun <T> Cursor.mapAll(mapper: (Cursor) -> T): List<T> {
+        val out = mutableListOf<T>()
+        while (moveToNext()) out += mapper(this)
+        return out
+    }
+
     private fun trackFrom(c: Cursor) = Track(
         id = c.getLong(0), uri = c.getString(1), parentUri = c.getString(2), displayName = c.getString(3),
         title = c.getString(4), artist = c.getString(5), album = c.getString(6), durationMs = c.getLong(7),
@@ -227,13 +231,10 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             "duration" -> "duration_ms DESC"
             else -> "title COLLATE NOCASE"
         }
-        val out = mutableListOf<Track>()
         val (where, args) = if (query.isBlank()) "" to emptyArray<String>()
         else "WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?" to arrayOf("%$query%", "%$query%", "%$query%")
-        readableDatabase.rawQuery("SELECT $trackCols FROM tracks $where ORDER BY $order", args).use { c ->
-            while (c.moveToNext()) out += trackFrom(c)
-        }
-        return out
+        return readableDatabase.rawQuery("SELECT $trackCols FROM tracks $where ORDER BY $order", args)
+            .use { c -> c.mapAll(::trackFrom) }
     }
 
     fun track(id: Long): Track? {
@@ -256,31 +257,22 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return ids.mapNotNull { byId[it] }
     }
 
-    fun tracksForAlbum(album: String, artist: String): List<Track> {
-        val out = mutableListOf<Track>()
+    fun tracksForAlbum(album: String, artist: String): List<Track> =
         readableDatabase.rawQuery(
             "SELECT $trackCols FROM tracks WHERE album=? AND artist=? ORDER BY track_no, title COLLATE NOCASE",
             arrayOf(album, artist)
-        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
-        return out
-    }
+        ).use { c -> c.mapAll(::trackFrom) }
 
-    fun tracksForArtist(artist: String): List<Track> {
-        val out = mutableListOf<Track>()
+    fun tracksForArtist(artist: String): List<Track> =
         readableDatabase.rawQuery(
             "SELECT $trackCols FROM tracks WHERE artist=? ORDER BY album COLLATE NOCASE, track_no, title COLLATE NOCASE",
             arrayOf(artist)
-        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
-        return out
-    }
+        ).use { c -> c.mapAll(::trackFrom) }
 
-    fun favorites(): List<Track> {
-        val out = mutableListOf<Track>()
+    fun favorites(): List<Track> =
         readableDatabase.rawQuery(
             "SELECT $trackCols FROM tracks WHERE favorite=1 ORDER BY title COLLATE NOCASE", null
-        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
-        return out
-    }
+        ).use { c -> c.mapAll(::trackFrom) }
 
     fun setFavorite(id: Long, fav: Boolean) {
         writableDatabase.execSQL("UPDATE tracks SET favorite=? WHERE id=?", arrayOf(if (fav) 1 else 0, id))
@@ -331,23 +323,17 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
 
     // ---------- albums / artists ----------
 
-    fun albums(): List<AlbumRow> {
-        val out = mutableListOf<AlbumRow>()
+    fun albums(): List<AlbumRow> =
         readableDatabase.rawQuery(
             """SELECT album, artist, COUNT(*), MIN(id) FROM tracks
                GROUP BY album, artist ORDER BY album COLLATE NOCASE""", null
-        ).use { c -> while (c.moveToNext()) out += AlbumRow(c.getString(0), c.getString(1), c.getInt(2), c.getLong(3)) }
-        return out
-    }
+        ).use { c -> c.mapAll { AlbumRow(it.getString(0), it.getString(1), it.getInt(2), it.getLong(3)) } }
 
-    fun artists(): List<ArtistRow> {
-        val out = mutableListOf<ArtistRow>()
+    fun artists(): List<ArtistRow> =
         readableDatabase.rawQuery(
             """SELECT artist, COUNT(*), MIN(id) FROM tracks
                GROUP BY artist ORDER BY artist COLLATE NOCASE""", null
-        ).use { c -> while (c.moveToNext()) out += ArtistRow(c.getString(0), c.getInt(1), c.getLong(2)) }
-        return out
-    }
+        ).use { c -> c.mapAll { ArtistRow(it.getString(0), it.getInt(1), it.getLong(2)) } }
 
     // ---------- playlists ----------
 
@@ -369,15 +355,12 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    fun playlists(): List<Playlist> {
-        val out = mutableListOf<Playlist>()
+    fun playlists(): List<Playlist> =
         readableDatabase.rawQuery(
             """SELECT p.id, p.name, COUNT(pt.track_id) FROM playlists p
                LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
                GROUP BY p.id, p.name ORDER BY p.created_at""", null
-        ).use { c -> while (c.moveToNext()) out += Playlist(c.getLong(0), c.getString(1), c.getInt(2)) }
-        return out
-    }
+        ).use { c -> c.mapAll { Playlist(it.getLong(0), it.getString(1), it.getInt(2)) } }
 
     fun playlist(id: Long): Playlist? {
         readableDatabase.rawQuery(
@@ -409,13 +392,10 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         )
     }
 
-    fun playlistTracks(playlistId: Long): List<Track> {
-        val out = mutableListOf<Track>()
+    fun playlistTracks(playlistId: Long): List<Track> =
         readableDatabase.rawQuery(
             """SELECT ${trackCols.split(", ").joinToString(", ") { "t.$it" }}
                FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
                WHERE pt.playlist_id=? ORDER BY pt.position""", arrayOf(playlistId.toString())
-        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
-        return out
-    }
+        ).use { c -> c.mapAll(::trackFrom) }
 }
