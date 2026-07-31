@@ -257,9 +257,6 @@ body.journal-open #main-container { padding:0; }
 .journal-back:active { transform: scale(0.93); }
 .journal-bar-title { flex:1; min-width:0; font-size:16px; font-weight:700; letter-spacing:-0.02em;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.journal-toggle { border:1.5px solid var(--accent); cursor:pointer; padding:8px 14px; border-radius:99px;
-  background:var(--accent-faint); color:var(--ink); font-size:12.5px; font-weight:700; flex-shrink:0; }
-.journal-toggle:active { transform: scale(0.96); }
 
 .journal-hero { display:flex; flex-direction:column; align-items:center; padding-top:30px; }
 .journal-title { font-size:27px; font-weight:700; letter-spacing:-0.03em; margin-top:16px; text-align:center; }
@@ -273,18 +270,15 @@ body.journal-open #main-container { padding:0; }
 .journal-tile-value { font-size:21px; font-weight:700; letter-spacing:-0.02em; }
 .journal-tile-label { font-size:11.5px; font-weight:600; color:var(--muted); margin-top:3px; }
 
-.journal-personality { margin-top:22px; border-radius:18px; padding:20px; background:var(--accent-faint); border:1.5px solid var(--accent); }
-.journal-personality-kicker { font-size:11.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
-.journal-personality-name { font-size:25px; font-weight:700; letter-spacing:-0.03em; margin-top:8px; }
-.journal-personality-desc { font-size:14px; line-height:1.6; color:var(--muted); margin-top:8px; }
-
 /* every section header doubles as the rule between blocks */
 .journal-section { display:flex; align-items:center; gap:10px; margin-top:24px; padding-top:24px; border-top:1px solid var(--divider); }
 .journal-section-bar { width:4px; height:17px; border-radius:2px; background:var(--accent); }
 .journal-section-name { font-size:17px; font-weight:700; letter-spacing:-0.02em; }
 
 .journal-artists { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:16px; }
-.journal-artist { display:flex; align-items:center; gap:11px; background:var(--inset-bg); border-radius:14px; padding:11px 12px; min-width:0; }
+.journal-artist { display:flex; align-items:center; gap:11px; background:var(--inset-bg); border-radius:14px; padding:11px 12px; min-width:0;
+  cursor:pointer; transition: transform 0.1s; }
+.journal-artist:active { transform: scale(0.97); }
 .journal-artist-face { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
   font-size:13px; font-weight:700; color:#3b3651; flex-shrink:0; }
 .journal-artist-name { font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -301,7 +295,8 @@ body.journal-open #main-container { padding:0; }
    screen edge and the padding is re-applied inside as scroll room */
 .journal-albums { display:flex; gap:13px; margin:16px -18px 0 -18px; padding:0 18px 4px 18px; overflow-x:auto; scrollbar-width:none; }
 .journal-albums::-webkit-scrollbar { height:0; }
-.journal-album { width:132px; flex-shrink:0; }
+.journal-album { width:132px; flex-shrink:0; cursor:pointer; transition: transform 0.1s; }
+.journal-album:active { transform: scale(0.97); }
 .journal-album-cover { position:relative; width:132px; height:132px; border-radius:15px; overflow:hidden;
   display:flex; align-items:center; justify-content:center; }
 .journal-album-cover img { width:100%; height:100%; object-fit:cover; }

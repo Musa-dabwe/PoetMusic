@@ -38,13 +38,13 @@ and shows lockscreen / notification controls.
   maker that stamps `[mm:ss.xx]` timestamps against live playback and exports a sidecar
   `.lrc`. Non-MP3 formats save to the library only.
 - **Listening Journal** — tap the Poet mark in the header for a full-screen report over
-  your own archive: track / album / hour totals, a listener personality read off the
-  shape of your plays, top artists / songs / albums / genres, listening habits (most
-  active day, longest streak, peak hour, discovery split, decade focus) counted from
-  songs you actually listened to, and library health (how much of the library you have
-  explored, tag integrity, missing cover art, paired `.lrc` files, format mix). Every
-  leaderboard shows five entries, or ten under **Show Wrapped**. The circular badge
-  takes a portrait picked from the gallery.
+  your own archive: track / album / hour totals, top artists / songs / albums / genres,
+  listening habits (most active day, longest streak, peak hour, discovery split, decade
+  focus) counted from songs you actually listened to, and library health (how much of
+  the library you have explored, tag integrity, missing cover art, paired `.lrc` files,
+  format mix). Every leaderboard shows ten entries; tapping a top artist or a top album
+  opens it exactly as the Artists / Albums tabs do. The circular badge takes a portrait
+  picked from the gallery.
 - **Theming** — pastel accent colors and canvas tints; the Android status bar follows
   the selected accent color.
 
