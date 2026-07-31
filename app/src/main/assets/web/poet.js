@@ -504,6 +504,27 @@ function setDark(on) {
   document.querySelectorAll('.theme-opt').forEach(function (b) { b.classList.toggle('on', (b.getAttribute('data-dark') === '1') === on); });
 }
 
+/* ---- full-screen album art ---- */
+function poetCloseArt() { document.getElementById('modal-root').innerHTML = ''; }
+
+/* ---- equalizer ----
+   Dragging a slider updates its label immediately; the value itself is only
+   committed on release (hx-trigger="change"), so a drag doesn't fire a request
+   per pixel. The card then re-renders with the committed state. */
+function poetEqLabel(index, millibels) {
+  var el = document.getElementById('eq-val-' + index);
+  if (!el) return;
+  var dB = Math.round(Number(millibels) / 100);
+  el.textContent = (dB > 0 ? '+' : '') + dB;
+}
+function poetEqStrength(kind, input) {
+  var pct = Math.round((Number(input.value) / Number(input.max)) * 100);
+  var el = document.getElementById('eq-' + kind + '-val');
+  if (el) el.textContent = pct + '%';
+  input.style.background =
+    'linear-gradient(to right, var(--accent) ' + pct + '%, var(--track-empty) ' + pct + '%)';
+}
+
 /* ---- onboarding ---- */
 function dismissTip() {
   localStorage.setItem('poet-tip-dismissed', '1');

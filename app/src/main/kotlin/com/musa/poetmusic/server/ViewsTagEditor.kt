@@ -14,6 +14,72 @@ object TagEditorViews {
           <input type="text" name="$name" value="${esc(value)}"${if (numeric) """ inputmode="numeric"""" else ""}${if (required) " required" else ""}>
         </label>"""
 
+    /** A batch field: blank submits as "leave unchanged" (see TagEditor.BatchForm). */
+    private fun batchField(label: String, name: String, placeholder: String, numeric: Boolean = false): String = """
+        <label class="ed-field">
+          <span>$label</span>
+          <input type="text" name="$name" value="" placeholder="${esc(placeholder)}"${if (numeric) """ inputmode="numeric"""" else ""}>
+        </label>"""
+
+    /**
+     * The multi-select tag editor (§4). Deliberately a reduced form: the fields
+     * that make sense to set identically across many files, and nothing that
+     * only makes sense per track (artwork, lyrics, comment, disc number, the
+     * rename pattern). Every field starts blank, and blank means "keep what
+     * each track already has" — so the sheet can only ever add information.
+     */
+    fun batchTagEditorSheet(tracks: List<Track>, ids: String): String {
+        val mp3s = tracks.count { it.displayName.endsWith(".mp3", ignoreCase = true) }
+        val others = tracks.size - mp3s
+        val note = when {
+            others == 0 -> "Written into all ${tracks.size} files"
+            mp3s == 0 -> "No MP3s selected — tags are saved to the Poet library only"
+            else -> "$mp3s written to file · $others saved to the library only (MP3 tag writing)"
+        }
+        val preview = tracks.take(3).joinToString(", ") { esc(it.title) } +
+            if (tracks.size > 3) " and ${tracks.size - 3} more" else ""
+
+        return """
+        <div class="sheet-shield" onclick="poetCloseEditor()"></div>
+        <form id="ed-form" class="editor-sheet" hx-put="/api/library/batch-tags?ids=$ids" hx-swap="none">
+          <div class="sheet-grab" style="margin:12px auto 12px auto;"></div>
+
+          <div class="ed-head">
+            <div class="ed-head-art" style="background:var(--accent-faint);">${tracks.size}</div>
+            <div style="flex:1; min-width:0;">
+              <div class="ed-head-title">Edit tags for ${tracks.size} songs</div>
+              <div class="ed-head-file">$preview</div>
+            </div>
+            <button type="button" class="ed-close" onclick="poetCloseEditor()" aria-label="Close">
+              <svg width="13" height="13" viewBox="0 0 12 12"><path d="M1 1 L11 11 M11 1 L1 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+            </button>
+          </div>
+
+          <div class="ed-body">
+            <div class="ed-batch-note">
+              Fields you leave empty stay as they are on each song. Anything you type
+              is written to <strong>all ${tracks.size}</strong> selected songs.
+            </div>
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              ${batchField("Title", "title", "Leave empty to keep each title")}
+              ${batchField("Artist", "artist", "Leave empty to keep")}
+              ${batchField("Album", "album", "Leave empty to keep")}
+              ${batchField("Album artist", "albumArtist", "Leave empty to keep")}
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                ${batchField("Genre", "genre", "Keep", numeric = false)}
+                ${batchField("Year", "year", "Keep", numeric = true)}
+              </div>
+              ${batchField("Track no.", "trackNo", "Leave empty to keep each number", numeric = true)}
+            </div>
+          </div>
+
+          <div class="ed-savebar">
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:15px; font-size:15px;">Apply to ${tracks.size} songs</button>
+            <div style="font-size:11px; color:var(--muted); text-align:center; margin-top:8px;">$note</div>
+          </div>
+        </form>"""
+    }
+
     /**
      * Full-height tag editor sheet (Details / Artwork / Lyrics) matching the
      * Poet design. The header "Save Metadata Changes" bar fires an hx-put form

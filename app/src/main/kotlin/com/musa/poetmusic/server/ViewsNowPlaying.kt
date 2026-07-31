@@ -81,7 +81,9 @@ object NowPlayingViews {
         <div class="screen" id="np-root" data-track-id="${s.trackId}">
           <button class="backlink" hx-get="/screens/library" hx-target="#main-container">← Library</button>
           <div style="display:flex; flex-direction:column; align-items:center;">
-            <div class="np-art" style="background:repeating-linear-gradient(45deg, $artBg, $artBg 14px, var(--card-bg) 14px, var(--card-bg) 28px);">
+            <div class="np-art" style="background:repeating-linear-gradient(45deg, $artBg, $artBg 14px, var(--card-bg) 14px, var(--card-bg) 28px);"
+                 hx-get="/partial/art-view/${s.trackId}" hx-target="#modal-root" hx-swap="innerHTML"
+                 role="button" aria-label="Open cover full screen">
               <img src="/api/art/${s.trackId}?v=${track?.lastModified ?: 0}" alt="album art">
             </div>
             <div id="np-title" style="font-size:22px; font-weight:700; letter-spacing:-0.02em; text-align:center;">${esc(s.title)}</div>
@@ -134,6 +136,26 @@ object NowPlayingViews {
           }
         </script>"""
     }
+
+    /**
+     * Full-screen cover viewer (§7). Swapped into #modal-root, so the shared
+     * overlay observer applies body.overlay-open and the back button closes it
+     * through the existing modal path. Tapping anywhere but the image or the
+     * save button dismisses it.
+     */
+    fun artViewer(trackId: Long, title: String, artist: String, stamp: Long): String = """
+        <div class="art-viewer" onclick="if(event.target===this) poetCloseArt()">
+          <img class="art-viewer-img" src="/api/art/$trackId?v=$stamp" alt="${esc(title)}"
+               onclick="poetCloseArt()">
+          <div class="art-viewer-meta">
+            <div class="art-viewer-title">${esc(title)}</div>
+            <div class="art-viewer-artist">${esc(artist)}</div>
+          </div>
+          <div class="art-viewer-actions">
+            <button class="art-viewer-btn" hx-post="/api/art/$trackId/save" hx-swap="none">Save to gallery</button>
+            <button class="art-viewer-btn ghost" onclick="poetCloseArt()">Close</button>
+          </div>
+        </div>"""
 
     fun lyricsDeckHtml(lines: List<LyricLine>): String {
         if (lines.isEmpty()) {

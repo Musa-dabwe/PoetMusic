@@ -3,13 +3,17 @@ package com.musa.poetmusic
 import android.Manifest
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -20,14 +24,18 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsControllerCompat
 import com.musa.poetmusic.data.JournalPortrait
+import com.musa.poetmusic.data.audioMime
 import com.musa.poetmusic.data.LibraryScanner
+import com.musa.poetmusic.data.LibraryWatcher
 import com.musa.poetmusic.data.TagEditor
 import com.musa.poetmusic.playback.PlaybackService
 import com.musa.poetmusic.server.PoetServer
 import com.musa.poetmusic.server.Shell
 import com.musa.poetmusic.widget.PoetWidgetProvider
+import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.concurrent.thread
@@ -56,6 +64,17 @@ class MainActivity : AppCompatActivity() {
 
     private val askPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+
+    /** Track whose cover is waiting on the pre-Android-10 write permission. */
+    private var pendingArtSaveId: Long? = null
+
+    private val askWriteForArt =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val id = pendingArtSaveId
+            pendingArtSaveId = null
+            if (granted && id != null) saveArtToGallery(id)
+            else runJs("poetToast('Storage permission is needed to save the cover');")
+        }
 
     /** Gallery image picker for the tag editor's album-art grabber. */
     private val pickArt = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -106,6 +125,24 @@ class MainActivity : AppCompatActivity() {
 
         installBackHandler()
         loadWhenServerReady()
+
+        // Bring a stale library back in step without the user asking (§3).
+        LibraryScanner.maybeAutoScan(this, (application as PoetApp).db)
+    }
+
+    /**
+     * The library watchdog only runs while Poet is on screen: it is there to
+     * notice files appearing under the user's nose, and polling a document
+     * provider from the background would cost battery for nothing.
+     */
+    override fun onStart() {
+        super.onStart()
+        LibraryWatcher.start(this, (application as PoetApp).db)
+    }
+
+    override fun onStop() {
+        LibraryWatcher.stop()
+        super.onStop()
     }
 
     /**
@@ -134,6 +171,8 @@ class MainActivity : AppCompatActivity() {
         PoetServer.pickPortraitRequester = {
             runOnUiThread { runCatching { pickPortrait.launch("image/*") } }
         }
+        PoetServer.shareRequester = { ids -> shareTracks(ids) }
+        PoetServer.saveArtRequester = { id -> requestSaveArt(id) }
         LibraryScanner.onFinished = {
             runJs("poetToast('Library scan finished'); if (poetScreenUrl.indexOf('/screens/library') === 0) poetGo(poetScreenUrl);")
         }
@@ -221,6 +260,157 @@ class MainActivity : AppCompatActivity() {
         if (missing.isNotEmpty()) askPermissions.launch(missing.toTypedArray())
     }
 
+    /**
+     * Share selected tracks (§6). SAF document URIs can't simply be forwarded
+     * — the receiving app has no grant on the user's document tree — so each
+     * file is staged into cacheDir/share and handed over as a FileProvider URI
+     * with a one-shot read grant. The staging directory is wiped on every
+     * share so it can't accumulate copies of the user's library.
+     */
+    private fun shareTracks(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        thread {
+            val db = (application as PoetApp).db
+            val dir = File(cacheDir, "share").apply { mkdirs() }
+            runCatching { dir.listFiles()?.forEach { it.delete() } }
+
+            val uris = ArrayList<Uri>()
+            val mimes = mutableSetOf<String>()
+            var budget = MAX_SHARE_BYTES
+            var skipped = 0
+            for (id in ids) {
+                val track = db.track(id) ?: continue
+                val staged = File(dir, sanitizeFileName(track.displayName))
+                val ok = runCatching {
+                    contentResolver.openInputStream(Uri.parse(track.uri))?.use { input ->
+                        staged.outputStream().use { out -> input.copyTo(out) }
+                    } ?: return@runCatching false
+                    if (staged.length() > budget) {
+                        staged.delete()
+                        return@runCatching false
+                    }
+                    budget -= staged.length()
+                    true
+                }.getOrDefault(false)
+                if (!ok) {
+                    skipped++
+                    continue
+                }
+                uris += FileProvider.getUriForFile(this, "$packageName.fileprovider", staged)
+                mimes += audioMime(track.displayName)
+            }
+
+            if (uris.isEmpty()) {
+                runJs("poetToast('Could not prepare ${if (ids.size == 1) "that file" else "those files"} for sharing');")
+                return@thread
+            }
+            // A mixed selection has no single accurate type; audio/* is honest.
+            val type = mimes.singleOrNull() ?: "audio/*"
+            val intent = if (uris.size == 1) {
+                Intent(Intent.ACTION_SEND).apply {
+                    putExtra(Intent.EXTRA_STREAM, uris[0])
+                }
+            } else {
+                Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                }
+            }.apply {
+                setType(type)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val started = runCatching {
+                    startActivity(Intent.createChooser(intent, if (uris.size == 1) "Share song" else "Share ${uris.size} songs"))
+                }.isSuccess
+                if (!started) runJs("poetToast('No app available to share with');")
+                else if (skipped > 0) runJs("poetToast('$skipped file${if (skipped == 1) "" else "s"} skipped (too large or unreadable)');")
+            }
+        }
+    }
+
+    /**
+     * "Save to gallery" from the full-screen art viewer (§7). Below Android 10
+     * writing to shared storage still needs WRITE_EXTERNAL_STORAGE, and it is
+     * asked for here — at the moment the user actually asks to save — rather
+     * than bundled into the startup permission dialog.
+     */
+    private fun requestSaveArt(trackId: Long) {
+        pendingArtSaveId = trackId
+        if (Build.VERSION.SDK_INT >= 29 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            saveArtToGallery(trackId)
+        } else {
+            runOnUiThread { askWriteForArt.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) }
+        }
+    }
+
+    private fun saveArtToGallery(trackId: Long) {
+        thread {
+            val db = (application as PoetApp).db
+            val track = db.track(trackId)
+            val art = track?.let { t ->
+                val mmr = MediaMetadataRetriever()
+                try {
+                    mmr.setDataSource(this, Uri.parse(t.uri))
+                    mmr.embeddedPicture
+                } catch (e: Exception) {
+                    null
+                } finally {
+                    runCatching { mmr.release() }
+                }
+            }
+            if (track == null || art == null) {
+                runJs("poetToast('No artwork to save for this song');")
+                return@thread
+            }
+            val name = sanitizeFileName("${track.artist} - ${track.album}".trim().ifBlank { track.title })
+            val saved = runCatching { writeImageToGallery(art, "$name.jpg") }.getOrDefault(false)
+            runJs(
+                if (saved) "poetToast('Cover saved to Pictures/Poet');"
+                else "poetToast('Could not save the cover');"
+            )
+        }
+    }
+
+    /**
+     * Insert JPEG bytes into MediaStore under Pictures/Poet. RELATIVE_PATH and
+     * IS_PENDING only exist from Android 10; older releases get an explicit
+     * file written into the public Pictures directory and indexed by path.
+     */
+    private fun writeImageToGallery(bytes: ByteArray, displayName: String): Boolean {
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Poet")
+            values.put(MediaStore.Images.Media.IS_PENDING, 1)
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: return false
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return false
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            contentResolver.update(uri, values, null, null)
+            return true
+        }
+        @Suppress("DEPRECATION")
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Poet")
+        if (!dir.exists() && !dir.mkdirs()) return false
+        val file = File(dir, displayName)
+        file.outputStream().use { it.write(bytes) }
+        @Suppress("DEPRECATION")
+        values.put(MediaStore.Images.Media.DATA, file.absolutePath)
+        contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        return true
+    }
+
+    /** Keep a staged copy's name recognisable but safe as a cache filename. */
+    private fun sanitizeFileName(name: String): String =
+        name.replace(Regex("""[\\/:*?"<>|]"""), "_").takeLast(120).ifBlank { "track" }
+
     /** Ask the launcher to place the Poet widget; falls back to a how-to toast. */
     private fun requestPinWidget() {
         val mgr = getSystemService(AppWidgetManager::class.java) ?: return
@@ -281,6 +471,8 @@ class MainActivity : AppCompatActivity() {
         PoetServer.pinWidgetRequester = null
         PoetServer.pickArtRequester = null
         PoetServer.pickPortraitRequester = null
+        PoetServer.shareRequester = null
+        PoetServer.saveArtRequester = null
         TagEditor.clearPendingArt()
         // Drop the WebView cache including the disk files, so album art HTTP
         // responses don't outlive the session. 'true' is required: with
@@ -293,6 +485,9 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val MAX_ART_BYTES = 8 * 1024 * 1024
+
+        /** Ceiling on one share's staged copies, so the cache can't balloon. */
+        const val MAX_SHARE_BYTES = 250L * 1024 * 1024
 
         /** Dark-mode primary (--bg in Shell's dark palette). */
         const val DARK_STATUS_BAR = "#16151d"

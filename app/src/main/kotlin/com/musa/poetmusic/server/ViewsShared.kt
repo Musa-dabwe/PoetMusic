@@ -13,15 +13,31 @@ data class QueueCtx(
     val sort: String = "title",
     val album: String = "",
     val artist: String = "",
-    val pid: Long = 0
+    val pid: Long = 0,
+    val genre: String = ""
 ) {
     fun resolve(db: MusicDatabase): List<Track> = when (ctx) {
         "album" -> db.tracksForAlbum(album, artist)
         "artist" -> db.tracksForArtist(artist)
+        "genre" -> db.tracksForGenre(genre)
         "playlist" -> db.playlistTracks(pid)
         "favorites" -> db.favorites()
         else -> db.tracks(q, sort)
     }
+
+    /**
+     * One page of the listing. The songs tab windows in SQL because it spans
+     * the whole library; every other context is already bounded by an album,
+     * artist, genre or playlist, so it is sliced after the read — the point of
+     * both paths is the same, keeping the rendered row count bounded.
+     */
+    fun resolvePage(db: MusicDatabase, offset: Int, limit: Int): List<Track> =
+        if (ctx == "songs") db.tracks(q, sort, limit, offset)
+        else resolve(db).drop(offset).take(limit)
+
+    /** Total rows behind [resolvePage], for the "showing x of y" footer. */
+    fun total(db: MusicDatabase): Int =
+        if (ctx == "songs") db.trackCount(q) else resolve(db).size
 
     fun query(): String = buildString {
         append("ctx=").append(enc(ctx))
@@ -30,6 +46,7 @@ data class QueueCtx(
         if (album.isNotEmpty()) append("&album=").append(enc(album))
         if (artist.isNotEmpty()) append("&artist=").append(enc(artist))
         if (pid != 0L) append("&pid=").append(pid)
+        if (genre.isNotEmpty()) append("&genre=").append(enc(genre))
     }
 }
 
@@ -67,9 +84,42 @@ object SharedViews {
         </div>"""
     }
 
-    fun songList(tracks: List<Track>, ctx: QueueCtx): String =
-        if (tracks.isEmpty()) """<div class="empty">No songs here yet.</div>"""
-        else """<div style="display:flex; flex-direction:column; gap:6px;">${tracks.joinToString("") { songRow(it, ctx) }}</div>"""
+    /**
+     * How many rows one page of a tracklist renders. Server-rendering every
+     * row of a 10k-track library on each keystroke is what this bounds; the
+     * rest arrive through the "Load more" sentinel below.
+     */
+    const val PAGE_SIZE = 60
+
+    /**
+     * A tracklist page. [total] is the full row count behind it, so the
+     * sentinel knows whether more rows exist; pass the list's own size (the
+     * default) for listings that are rendered whole.
+     */
+    fun songList(tracks: List<Track>, ctx: QueueCtx, offset: Int = 0, total: Int = tracks.size): String {
+        if (tracks.isEmpty() && offset == 0) return """<div class="empty">No songs here yet.</div>"""
+        val rows = tracks.joinToString("") { songRow(it, ctx) }
+        return """<div style="display:flex; flex-direction:column; gap:6px;">$rows${loadMore(ctx, offset + tracks.size, total)}</div>"""
+    }
+
+    /**
+     * Rows for the next page, swapped in place of the sentinel that requested
+     * them (hx-swap="outerHTML"), so each tap appends a page and re-arms the
+     * button without re-rendering what is already on screen.
+     */
+    fun songListPage(tracks: List<Track>, ctx: QueueCtx, offset: Int, total: Int): String =
+        tracks.joinToString("") { songRow(it, ctx) } + loadMore(ctx, offset + tracks.size, total)
+
+    /** The "Load more" sentinel, or nothing once the whole listing is rendered. */
+    private fun loadMore(ctx: QueueCtx, shown: Int, total: Int): String {
+        if (shown >= total) return ""
+        val remaining = total - shown
+        return """
+        <button class="load-more" hx-get="/partial/songs-page?offset=$shown&amp;${esc(ctx.query())}"
+                hx-target="this" hx-swap="outerHTML">
+          Load more <span class="load-more-count">$remaining left</span>
+        </button>"""
+    }
 
     internal fun masterControls(ctx: QueueCtx): String {
         val cq = ctx.query()

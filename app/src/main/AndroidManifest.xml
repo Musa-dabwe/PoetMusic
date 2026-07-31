@@ -11,6 +11,12 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- Only for "Save cover to gallery" below Android 10, where MediaStore
+         inserts still need it. Requested at the moment of saving, never at
+         startup. Android 10+ writes through RELATIVE_PATH with no permission. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:name=".PoetApp"
@@ -31,6 +37,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Grants read access to individual staged files handed to the share
+             sheet. Not exported: each share intent carries its own one-shot
+             read grant for exactly the URIs it names. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <receiver
             android:name=".widget.PoetWidgetProvider"

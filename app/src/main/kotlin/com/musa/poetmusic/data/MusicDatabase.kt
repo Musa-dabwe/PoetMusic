@@ -234,24 +234,51 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     private val trackCols =
         "id, uri, parent_uri, display_name, title, artist, album, duration_ms, track_no, genre, year, has_art, lrc_uri, folder_id, favorite, date_added, last_modified, album_artist, disc_no, composer, comment"
 
-    fun tracks(query: String = "", sort: String = "title"): List<Track> {
-        val order = when (sort) {
-            "title_desc" -> "title COLLATE NOCASE DESC"
-            "artist" -> "artist COLLATE NOCASE, title COLLATE NOCASE"
-            "artist_desc" -> "artist COLLATE NOCASE DESC, title COLLATE NOCASE"
-            "date_modified" -> "last_modified DESC, date_added DESC, id DESC"
-            "date_added" -> "date_added ASC, id ASC"
-            "recent" -> "date_added DESC"
-            "duration" -> "duration_ms DESC"
-            else -> "title COLLATE NOCASE"
-        }
-        val out = mutableListOf<Track>()
-        val (where, args) = if (query.isBlank()) "" to emptyArray<String>()
+    /**
+     * Every order ends in `id` so it is a total order: LIMIT/OFFSET paging over
+     * a sort whose ties SQLite may break differently per query would otherwise
+     * repeat or skip rows between pages.
+     */
+    private fun trackOrder(sort: String): String = when (sort) {
+        "title_desc" -> "title COLLATE NOCASE DESC, id"
+        "artist" -> "artist COLLATE NOCASE, title COLLATE NOCASE, id"
+        "artist_desc" -> "artist COLLATE NOCASE DESC, title COLLATE NOCASE, id"
+        "date_modified" -> "last_modified DESC, date_added DESC, id DESC"
+        "date_added" -> "date_added ASC, id ASC"
+        "recent" -> "date_added DESC, id DESC"
+        "duration" -> "duration_ms DESC, id"
+        "duration_asc" -> "duration_ms ASC, id"
+        else -> "title COLLATE NOCASE, id"
+    }
+
+    /** WHERE clause + bound arguments for the library search box. */
+    private fun trackFilter(query: String): Pair<String, Array<String>> =
+        if (query.isBlank()) "" to emptyArray()
         else "WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?" to arrayOf("%$query%", "%$query%", "%$query%")
-        readableDatabase.rawQuery("SELECT $trackCols FROM tracks $where ORDER BY $order", args).use { c ->
+
+    /**
+     * Songs matching [query] in [sort] order. [limit] < 0 reads the whole
+     * library; a non-negative limit windows the read so the songs tab can
+     * render one page at a time instead of every row on every keystroke.
+     */
+    fun tracks(query: String = "", sort: String = "title", limit: Int = -1, offset: Int = 0): List<Track> {
+        val out = mutableListOf<Track>()
+        val (where, args) = trackFilter(query)
+        val window = if (limit >= 0) " LIMIT $limit OFFSET ${offset.coerceAtLeast(0)}" else ""
+        readableDatabase.rawQuery(
+            "SELECT $trackCols FROM tracks $where ORDER BY ${trackOrder(sort)}$window", args
+        ).use { c ->
             while (c.moveToNext()) out += trackFrom(c)
         }
         return out
+    }
+
+    /** How many songs [query] matches — the total behind a windowed read. */
+    fun trackCount(query: String): Int {
+        val (where, args) = trackFilter(query)
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM tracks $where", args).use { c ->
+            return if (c.moveToFirst()) c.getInt(0) else 0
+        }
     }
 
     fun track(id: Long): Track? {
@@ -318,6 +345,29 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
     }
 
+    /**
+     * Batch-editing counterpart to [updateTags]: null means "leave this column
+     * alone", so a batch that only sets the artist can't blank out every other
+     * field of the selected tracks.
+     */
+    fun updatePartialTags(
+        id: Long, title: String? = null, artist: String? = null, album: String? = null,
+        genre: String? = null, year: String? = null, trackNo: Int? = null, albumArtist: String? = null
+    ) {
+        val cv = ContentValues().apply {
+            title?.let { put("title", it) }
+            artist?.let { put("artist", it) }
+            album?.let { put("album", it) }
+            genre?.let { put("genre", it) }
+            year?.let { put("year", it) }
+            trackNo?.let { put("track_no", it) }
+            albumArtist?.let { put("album_artist", it) }
+        }
+        if (cv.size() == 0) return
+        cv.put("last_modified", System.currentTimeMillis())
+        writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
+    }
+
     /** Points a track row at its new document after a physical file rename. */
     fun updateTrackFile(id: Long, uri: String, displayName: String) {
         val cv = ContentValues().apply { put("uri", uri); put("display_name", displayName) }
@@ -348,23 +398,66 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    // ---------- albums / artists ----------
+    // ---------- albums / artists / genres ----------
 
-    fun albums(): List<AlbumRow> {
+    /**
+     * Albums grouped by (album, artist). [sort] mirrors the album sort drawer:
+     * title, artist, year or track count. The year shown is the earliest
+     * four-digit year tagged on any of the album's tracks, so a compilation
+     * with one mistagged file still sorts sensibly.
+     */
+    fun albums(sort: String = "title"): List<AlbumRow> {
+        val order = when (sort) {
+            "artist" -> "artist COLLATE NOCASE, album COLLATE NOCASE"
+            "year" -> "year DESC, album COLLATE NOCASE"
+            "tracks" -> "n DESC, album COLLATE NOCASE"
+            else -> "album COLLATE NOCASE"
+        }
         val out = mutableListOf<AlbumRow>()
         readableDatabase.rawQuery(
-            """SELECT album, artist, COUNT(*), MIN(id) FROM tracks
-               GROUP BY album, artist ORDER BY album COLLATE NOCASE""", null
-        ).use { c -> while (c.moveToNext()) out += AlbumRow(c.getString(0), c.getString(1), c.getInt(2), c.getLong(3)) }
+            // Prefer a track that actually carries a cover so an album whose art
+            // sits on a later file still renders one; fall back to any track,
+            // which at least gives the tile its pastel tint.
+            """SELECT album, artist, COUNT(*) AS n,
+                      COALESCE(NULLIF(MAX(CASE WHEN has_art = 1 THEN id ELSE 0 END), 0), MIN(id)),
+                      COALESCE(MIN(NULLIF(SUBSTR(year, 1, 4), '')), '') AS year
+               FROM tracks GROUP BY album, artist ORDER BY $order""", null
+        ).use { c ->
+            while (c.moveToNext()) {
+                out += AlbumRow(c.getString(0), c.getString(1), c.getInt(2), c.getLong(3), c.getString(4))
+            }
+        }
         return out
     }
 
-    fun artists(): List<ArtistRow> {
+    fun artists(sort: String = "name"): List<ArtistRow> {
+        val order = if (sort == "tracks") "n DESC, artist COLLATE NOCASE" else "artist COLLATE NOCASE"
         val out = mutableListOf<ArtistRow>()
         readableDatabase.rawQuery(
-            """SELECT artist, COUNT(*), MIN(id) FROM tracks
-               GROUP BY artist ORDER BY artist COLLATE NOCASE""", null
+            """SELECT artist, COUNT(*) AS n, MIN(id) FROM tracks
+               GROUP BY artist ORDER BY $order""", null
         ).use { c -> while (c.moveToNext()) out += ArtistRow(c.getString(0), c.getInt(1), c.getLong(2)) }
+        return out
+    }
+
+    /** Tagged genres with their track counts; untagged tracks are excluded. */
+    fun genres(sort: String = "name"): List<GenreRow> {
+        val order = if (sort == "tracks") "n DESC, genre COLLATE NOCASE" else "genre COLLATE NOCASE"
+        val out = mutableListOf<GenreRow>()
+        readableDatabase.rawQuery(
+            """SELECT genre, COUNT(*) AS n, MIN(id) FROM tracks
+               WHERE genre <> '' GROUP BY genre ORDER BY $order""", null
+        ).use { c -> while (c.moveToNext()) out += GenreRow(c.getString(0), c.getInt(1), c.getLong(2)) }
+        return out
+    }
+
+    fun tracksForGenre(genre: String): List<Track> {
+        val out = mutableListOf<Track>()
+        readableDatabase.rawQuery(
+            """SELECT $trackCols FROM tracks WHERE genre=?
+               ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, track_no, title COLLATE NOCASE""",
+            arrayOf(genre)
+        ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
         return out
     }
 

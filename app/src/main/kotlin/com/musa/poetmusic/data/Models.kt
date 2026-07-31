@@ -24,9 +24,15 @@ data class Track(
     val lastModified: Long
 )
 
-data class AlbumRow(val album: String, val artist: String, val trackCount: Int, val artTrackId: Long)
+/** [year] is the earliest four-digit year tagged on the album, or empty. */
+data class AlbumRow(
+    val album: String, val artist: String, val trackCount: Int, val artTrackId: Long, val year: String = ""
+)
 
 data class ArtistRow(val artist: String, val trackCount: Int, val artTrackId: Long)
+
+/** One tagged genre and how many library tracks carry it. */
+data class GenreRow(val genre: String, val trackCount: Int, val artTrackId: Long)
 
 data class Playlist(val id: Long, val name: String, val trackCount: Int)
 

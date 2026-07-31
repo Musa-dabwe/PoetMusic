@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The only thing Poet ever exposes to another app: the staging directory the
+  share sheet copies selected tracks into. Nothing else in the app's storage is
+  reachable through the provider.
+-->
+<paths>
+    <cache-path name="shared" path="share/" />
+</paths>

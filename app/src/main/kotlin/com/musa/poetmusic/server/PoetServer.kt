@@ -7,9 +7,12 @@ import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import com.musa.poetmusic.data.JournalPortrait
 import com.musa.poetmusic.data.LibraryScanner
+import com.musa.poetmusic.data.LibraryWatcher
 import com.musa.poetmusic.data.LrcParser
 import com.musa.poetmusic.data.MusicDatabase
 import com.musa.poetmusic.data.TagEditor
+import com.musa.poetmusic.data.audioMime
+import com.musa.poetmusic.playback.AudioFx
 import com.musa.poetmusic.playback.PlayerController
 import com.musa.poetmusic.widget.WidgetRenderer
 import io.ktor.http.ContentType
@@ -48,6 +51,12 @@ object PoetServer {
 
     /** Set by MainActivity so the journal can open the gallery image picker. */
     @Volatile var pickPortraitRequester: (() -> Unit)? = null
+
+    /** Set by MainActivity so the drawer can hand tracks to the system share sheet. */
+    @Volatile var shareRequester: ((List<Long>) -> Unit)? = null
+
+    /** Set by MainActivity so the art viewer can write a cover to the gallery. */
+    @Volatile var saveArtRequester: ((Long) -> Unit)? = null
 
     private var started = false
 
@@ -120,11 +129,13 @@ object PoetServer {
                 get("/screens/library") {
                     // Tab and sort fall back to the persisted state so the library
                     // looks the same after navigating away or restarting the app.
+                    // Each tab keeps its own sort (LibrarySort), so switching tabs
+                    // never rewrites another tab's order.
                     val tab = call.request.queryParameters["tab"]?.also { db.setSetting("lib_tab", it) }
                         ?: db.getSetting("lib_tab", "songs")
                     val q = call.request.queryParameters["q"] ?: ""
-                    val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
-                        ?: db.getSetting("lib_sort", "title")
+                    val sort = call.request.queryParameters["sort"]?.also { LibrarySort.write(db, tab, it) }
+                        ?: LibrarySort.read(db, tab)
                     call.respondText(LibraryViews.libraryScreen(db, tab, q, sort), ContentType.Text.Html)
                 }
 
@@ -153,6 +164,11 @@ object PoetServer {
                     call.respondText(LibraryViews.artistScreen(db, name), ContentType.Text.Html)
                 }
 
+                get("/screens/genre") {
+                    val name = call.request.queryParameters["name"] ?: ""
+                    call.respondText(LibraryViews.genreScreen(db, name), ContentType.Text.Html)
+                }
+
                 get("/screens/journal") {
                     call.respondText(
                         JournalViews.journalScreen(
@@ -177,10 +193,19 @@ object PoetServer {
 
                 get("/partial/songs") {
                     val q = call.request.queryParameters["q"] ?: ""
-                    val sort = call.request.queryParameters["sort"]?.also { db.setSetting("lib_sort", it) }
-                        ?: db.getSetting("lib_sort", "title")
+                    val sort = call.request.queryParameters["sort"]?.also { LibrarySort.write(db, "songs", it) }
+                        ?: LibrarySort.read(db, "songs")
                     val ctx = QueueCtx("songs", q, sort)
-                    call.respondText(SharedViews.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                    call.respondText(songPage(db, ctx, 0), ContentType.Text.Html)
+                }
+
+                /** Next page of a tracklist, swapped over the "Load more" sentinel. */
+                get("/partial/songs-page") {
+                    val ctx = queueCtx()
+                    val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                    val total = ctx.total(db)
+                    val page = ctx.resolvePage(db, offset, SharedViews.PAGE_SIZE)
+                    call.respondText(SharedViews.songListPage(page, ctx, offset, total), ContentType.Text.Html)
                 }
 
                 get("/partial/queue") {
@@ -196,12 +221,23 @@ object PoetServer {
                     call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
                 }
 
+                /** Full-screen cover viewer (§7). */
+                get("/partial/art-view/{id}") {
+                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
+                        ?: return@get call.respondText("", ContentType.Text.Html)
+                    call.respondText(
+                        NowPlayingViews.artViewer(t.id, t.title, t.artist, t.lastModified),
+                        ContentType.Text.Html
+                    )
+                }
+
                 get("/partial/sleep-menu") {
                     call.respondText(NowPlayingViews.sleepDrawer(), ContentType.Text.Html)
                 }
 
                 get("/partial/sort-drawer") {
-                    call.respondText(LibraryViews.sortDrawer(db.getSetting("lib_sort", "title")), ContentType.Text.Html)
+                    val tab = sortTab()
+                    call.respondText(LibraryViews.sortDrawer(tab, LibrarySort.read(db, tab)), ContentType.Text.Html)
                 }
 
                 /** Empty fragment: swapped into overlay roots to close them. */
@@ -413,6 +449,15 @@ object PoetServer {
                     toast("Added ${ids.size} $songWord to ${pids.size} $plWord")
                 }
 
+                /** Hand the selection to the system share sheet (§6). */
+                post("/api/tracks/share") {
+                    val ids = idList().filter { db.track(it) != null }
+                    if (ids.isEmpty()) return@post toast("Nothing to share")
+                    val requester = shareRequester ?: return@post toast("Sharing is unavailable right now")
+                    requester(ids)
+                    noContent()
+                }
+
                 post("/api/tracks/delete") {
                     val ids = idList()
                     if (ids.isEmpty()) return@post noContent()
@@ -446,16 +491,22 @@ object PoetServer {
 
                 /**
                  * Sort endpoint fired by the pastel sort drawer. Maps the
-                 * drawer's type slug to a library sort key, persists it, and
-                 * returns the re-sorted tracklist for the #song-list target.
+                 * drawer's type slug to that tab's sort key and persists it.
+                 * Songs answer with the re-sorted first page for #song-list;
+                 * the grouped tabs re-render the whole library screen, since
+                 * their sort reorders tiles rather than a list fragment.
                  */
                 get("/api/library/sort") {
-                    val type = call.request.queryParameters["type"] ?: "title-az"
-                    val sort = LibraryViews.SORT_STATES.firstOrNull { it.first == type }?.second ?: "title"
-                    db.setSetting("lib_sort", sort)
-                    val q = call.request.queryParameters["q"] ?: ""
-                    val ctx = QueueCtx("songs", q, sort)
-                    call.respondText(SharedViews.songList(db.tracks(q, sort), ctx), ContentType.Text.Html)
+                    val tab = sortTab()
+                    val sort = LibrarySort.keyForSlug(tab, call.request.queryParameters["type"] ?: "")
+                    LibrarySort.write(db, tab, sort)
+                    if (tab == "songs") {
+                        val q = call.request.queryParameters["q"] ?: ""
+                        call.respondText(songPage(db, QueueCtx("songs", q, sort), 0), ContentType.Text.Html)
+                    } else {
+                        db.setSetting("lib_tab", tab)
+                        call.respondText(LibraryViews.libraryScreen(db, tab, "", sort), ContentType.Text.Html)
+                    }
                 }
 
                 post("/api/library/scan") {
@@ -465,6 +516,21 @@ object PoetServer {
                         return@post
                     }
                     LibraryScanner.startScan(app, db)
+                    call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
+                }
+
+                /** Automatic-rescan switch; re-arms the foreground watchdog (§3). */
+                post("/api/library/auto-scan") {
+                    val on = call.request.queryParameters["on"] == "1"
+                    db.setSetting(LibraryScanner.KEY_AUTO, if (on) "1" else "0")
+                    if (on) LibraryWatcher.restart(app, db) else LibraryWatcher.stop()
+                    call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
+                }
+
+                post("/api/library/scan-interval") {
+                    call.request.queryParameters["h"]?.toIntOrNull()
+                        ?.takeIf { it in LibraryScanner.INTERVAL_CHOICES }
+                        ?.let { db.setSetting(LibraryScanner.KEY_INTERVAL_H, it.toString()) }
                     call.respondText(SettingsViews.scanCard(db), ContentType.Text.Html)
                 }
 
@@ -507,6 +573,40 @@ object PoetServer {
                     call.response.header(
                         "HX-Trigger",
                         """{"poet-toast":${jsonStr(result.message)},"poet-close-modal":true,"poet-refresh":true$artEvent}"""
+                    )
+                    call.respond(HttpStatusCode.NoContent)
+                }
+
+                // ---------- batch tag editing (§4) ----------
+
+                get("/api/library/batch-tags") {
+                    val ids = idList(call.request.queryParameters["ids"] ?: "")
+                    val tracks = ids.mapNotNull(db::track)
+                    if (tracks.size < 2) return@get call.respondText("", ContentType.Text.Html)
+                    call.respondText(TagEditorViews.batchTagEditorSheet(tracks, idsParam(ids)), ContentType.Text.Html)
+                }
+
+                put("/api/library/batch-tags") {
+                    val ids = idList(call.request.queryParameters["ids"] ?: "")
+                    if (ids.isEmpty()) return@put noContent()
+                    val p = call.receiveParameters()
+                    val form = TagEditor.BatchForm(
+                        title = p["title"] ?: "", artist = p["artist"] ?: "", album = p["album"] ?: "",
+                        albumArtist = p["albumArtist"] ?: "", genre = p["genre"] ?: "",
+                        year = p["year"] ?: "", trackNo = p["trackNo"] ?: ""
+                    )
+                    if (form.isEmpty()) {
+                        call.response.header("HX-Trigger", """{"poet-toast":"Fill in at least one field"}""")
+                        return@put call.respond(HttpStatusCode.NoContent)
+                    }
+                    val result = TagEditor.applyBatch(app, db, ids, form)
+                    // A batch write may rename nothing but does change titles the
+                    // queue is showing; refresh the screen and drop stale covers.
+                    ids.forEach(::artCacheEvict)
+                    WidgetRenderer.pushUpdate(app)
+                    call.response.header(
+                        "HX-Trigger",
+                        """{"poet-toast":${jsonStr(result.message)},"poet-close-modal":true,"poet-refresh":true}"""
                     )
                     call.respond(HttpStatusCode.NoContent)
                 }
@@ -612,6 +712,46 @@ object PoetServer {
                     noContent()
                 }
 
+                // ---------- equalizer ----------
+
+                /* Every effect route answers with the whole re-rendered card:
+                   a preset moves every band at once, and enabling the chain
+                   restyles the sliders, so a partial swap would go stale. */
+
+                post("/api/eq/enabled") {
+                    AudioFx.setEnabled(db, call.request.queryParameters["on"] == "1")
+                    call.respondText(SettingsViews.equalizerCard(db), ContentType.Text.Html)
+                }
+
+                post("/api/eq/preset") {
+                    call.request.queryParameters["name"]?.let { AudioFx.applyPreset(db, it) }
+                    call.respondText(SettingsViews.equalizerCard(db), ContentType.Text.Html)
+                }
+
+                post("/api/eq/band") {
+                    val index = call.request.queryParameters["i"]?.toIntOrNull()
+                    val level = call.receiveParameters()["level"]?.toIntOrNull()
+                    if (index != null && level != null) AudioFx.setBand(db, index, level)
+                    call.respondText(SettingsViews.equalizerCard(db), ContentType.Text.Html)
+                }
+
+                post("/api/eq/bass") {
+                    call.receiveParameters()["v"]?.toIntOrNull()?.let { AudioFx.setBassStrength(db, it) }
+                    call.respondText(SettingsViews.equalizerCard(db), ContentType.Text.Html)
+                }
+
+                post("/api/eq/virtualizer") {
+                    call.receiveParameters()["v"]?.toIntOrNull()?.let { AudioFx.setVirtualizerStrength(db, it) }
+                    call.respondText(SettingsViews.equalizerCard(db), ContentType.Text.Html)
+                }
+
+                /** Previous-button restart threshold (§8): seconds, 0 = never restart. */
+                post("/api/settings/prev-restart") {
+                    val sec = call.request.queryParameters["sec"]?.toIntOrNull()?.coerceIn(0, 30) ?: 3
+                    PlayerController.setPrevRestartMs(db, sec * 1000L)
+                    call.respondText(SettingsViews.settingsScreen(db, false), ContentType.Text.Html)
+                }
+
                 post("/api/settings/dark") {
                     val on = call.receiveParameters()["on"] == "1"
                     db.setSetting("dark", if (on) "1" else "0")
@@ -685,17 +825,20 @@ object PoetServer {
                     }
                 }
 
+                /** Write this track's cover into the device gallery (§7). */
+                post("/api/art/{id}/save") {
+                    val t = call.parameters["id"]?.toLongOrNull()?.let(db::track)
+                        ?: return@post toast("Track not found")
+                    if (!t.hasArt) return@post toast("This song has no embedded artwork")
+                    val requester = saveArtRequester ?: return@post toast("Saving is unavailable right now")
+                    requester(t.id)
+                    noContent()
+                }
+
                 get("/api/stream/{id}") {
                     val track = call.parameters["id"]?.toLongOrNull()?.let(db::track)
                         ?: return@get call.respond(HttpStatusCode.NotFound)
-                    val mime = when (track.displayName.substringAfterLast('.', "").lowercase()) {
-                        "mp3" -> "audio/mpeg"
-                        "flac" -> "audio/flac"
-                        "m4a", "aac" -> "audio/mp4"
-                        "ogg", "opus" -> "audio/ogg"
-                        "wav" -> "audio/wav"
-                        else -> "application/octet-stream"
-                    }
+                    val mime = audioMime(track.displayName)
                     val input = try {
                         app.contentResolver.openInputStream(Uri.parse(track.uri))
                     } catch (e: Exception) {
@@ -719,10 +862,21 @@ object PoetServer {
     private fun sourceLabel(db: MusicDatabase, ctx: QueueCtx): String = when (ctx.ctx) {
         "album" -> ctx.album.ifBlank { "Album" }
         "artist" -> ctx.artist.ifBlank { "Artist" }
+        "genre" -> ctx.genre.ifBlank { "Genre" }
         "playlist" -> db.playlist(ctx.pid)?.name ?: "Playlist"
         "favorites" -> "Favorites"
         else -> if (ctx.q.isNotBlank()) "search “${ctx.q}”" else "All songs"
     }
+
+    /** The library tab a sort request applies to; unknown tabs mean Songs. */
+    private fun PipelineContext<Unit, ApplicationCall>.sortTab(): String {
+        val tab = call.request.queryParameters["tab"] ?: "songs"
+        return if (tab in LibrarySort.SORTABLE_TABS) tab else "songs"
+    }
+
+    /** First (or nth) page of a tracklist, with the total behind it. */
+    private fun songPage(db: MusicDatabase, ctx: QueueCtx, offset: Int): String =
+        SharedViews.songList(ctx.resolvePage(db, offset, SharedViews.PAGE_SIZE), ctx, offset, ctx.total(db))
 
     /** Parse a comma-separated list of track ids (see [parseIds]). */
     private fun idList(raw: String): List<Long> = parseIds(raw)
@@ -739,7 +893,8 @@ object PoetServer {
             sort = p["sort"] ?: "title",
             album = p["album"] ?: "",
             artist = p["artist"] ?: "",
-            pid = p["pid"]?.toLongOrNull() ?: 0
+            pid = p["pid"]?.toLongOrNull() ?: 0,
+            genre = p["genre"] ?: ""
         )
     }
 
