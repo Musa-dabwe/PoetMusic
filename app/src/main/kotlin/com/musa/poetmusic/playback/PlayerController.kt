@@ -98,6 +98,16 @@ object PlayerController {
     private var lastPersistedIds = ""
     private var lastPersistedMaster = ""
 
+    /**
+     * Track already written to the journal's plays log for the current listen;
+     * -1 until this song crosses [PLAY_THRESHOLD_MS]. Reset on every media item
+     * transition, so a repeat of the same song is logged as a second play.
+     */
+    private var countedTrackId = -1L
+
+    /** A song counts as played once this much of it has been heard. */
+    private const val PLAY_THRESHOLD_MS = 20_000L
+
     private val refresher = object : Runnable {
         override fun run() {
             // Enforce the sleep deadline against the wall clock here rather
@@ -110,6 +120,7 @@ object PlayerController {
             }
             refreshSnapshot()
             onSnapshotRefreshed?.invoke(snapshot)
+            countPlayIfListened()
             persistIfDue()
             handler.postDelayed(this, 500)
         }
@@ -124,6 +135,8 @@ object PlayerController {
         // of the same song counts as a song; user-initiated skips don't.
         p.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // A new item (or a repeat of the same one) is a fresh listen.
+                countedTrackId = -1
                 if (sleepSongs <= 0) return
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
                     reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
@@ -147,6 +160,7 @@ object PlayerController {
         persistNow()
         sleepDeadline = -1
         sleepSongs = 0
+        countedTrackId = -1
         player = null
         snapshot = Snapshot()
         masterIds = emptyList()
@@ -178,6 +192,23 @@ object PlayerController {
             sleepRemainingMs = if (sleepDeadline > 0) (sleepDeadline - System.currentTimeMillis()).coerceAtLeast(0) else -1,
             sleepSongsRemaining = sleepSongs
         )
+    }
+
+    // ---------- listening journal ----------
+
+    /**
+     * Log the current song to the journal once enough of it has been heard:
+     * 20 s, or half the song when it is shorter than that, so a skipped track
+     * never inflates the play counts. Runs on the main thread alongside the
+     * snapshot refresh; one row per listen is a cheap insert.
+     */
+    private fun countPlayIfListened() {
+        val s = snapshot
+        if (!s.playing || s.trackId < 0 || s.trackId == countedTrackId) return
+        val threshold = if (s.durationMs > 0) minOf(PLAY_THRESHOLD_MS, s.durationMs / 2) else PLAY_THRESHOLD_MS
+        if (s.positionMs < threshold) return
+        countedTrackId = s.trackId
+        store?.recordPlay(s.trackId)
     }
 
     // ---------- playback state persistence ----------

@@ -33,6 +33,9 @@ fun fmtTime(ms: Long): String {
     return "$m:${if (s < 10) "0$s" else "$s"}"
 }
 
+/** Grouped decimal count for display ("1420" -> "1,420"). */
+fun fmtCount(n: Int): String = String.format(java.util.Locale.US, "%,d", n)
+
 fun initials(name: String): String =
     name.split(" ", "-", "_").filter { it.isNotBlank() }.take(2)
         .joinToString("") { it.first().uppercase() }

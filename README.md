@@ -37,6 +37,11 @@ and shows lockscreen / notification controls.
   strips the existing one. Lyrics stores unsynced text (USLT) and includes a synced-LRC
   maker that stamps `[mm:ss.xx]` timestamps against live playback and exports a sidecar
   `.lrc`. Non-MP3 formats save to the library only.
+- **Listening Journal** — tap the Poet mark in the header for a stats dashboard over
+  your own archive: track / album / hour totals, heavy rotation (top track, most
+  active artist, peak listening hour) counted from songs you actually listened to,
+  and library health (tag integrity, missing cover art, paired `.lrc` files). The
+  circular badge takes a portrait picked from the gallery.
 - **Theming** — pastel accent colors and canvas tints; the Android status bar follows
   the selected accent color.
 
@@ -53,7 +58,7 @@ and shows lockscreen / notification controls.
 │      │                                                     │             │
 │  PlaybackService (Media3) ◄── PlayerController ◄───────────┘             │
 │      │                                                                   │
-│  MusicDatabase (SQLite): tracks, folders, playlists, settings            │
+│  MusicDatabase (SQLite): tracks, folders, playlists, plays, settings     │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 

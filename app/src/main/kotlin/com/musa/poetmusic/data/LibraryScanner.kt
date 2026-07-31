@@ -100,8 +100,8 @@ object LibraryScanner {
             progressText = "Scanning: ${child.name}"
             val base = child.name.substringBeforeLast('.')
             var title = base
-            var artist = "Unknown artist"
-            var album = "Unknown album"
+            var artist = MusicDatabase.UNKNOWN_ARTIST
+            var album = MusicDatabase.UNKNOWN_ALBUM
             var durationMs = 0L
             var trackNo = 0
             var genre = ""

@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import com.musa.poetmusic.data.JournalPortrait
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.LrcParser
 import com.musa.poetmusic.data.MusicDatabase
@@ -44,6 +45,9 @@ object PoetServer {
 
     /** Set by MainActivity so the tag editor can open the gallery image picker. */
     @Volatile var pickArtRequester: (() -> Unit)? = null
+
+    /** Set by MainActivity so the journal can open the gallery image picker. */
+    @Volatile var pickPortraitRequester: (() -> Unit)? = null
 
     private var started = false
 
@@ -147,6 +151,17 @@ object PoetServer {
                 get("/screens/artist") {
                     val name = call.request.queryParameters["name"] ?: ""
                     call.respondText(LibraryViews.artistScreen(db, name), ContentType.Text.Html)
+                }
+
+                get("/screens/journal") {
+                    call.respondText(
+                        JournalViews.journalScreen(
+                            db.journalStats(),
+                            JournalPortrait.exists(app),
+                            JournalPortrait.stamp(db)
+                        ),
+                        ContentType.Text.Html
+                    )
                 }
 
                 get("/screens/favorites") {
@@ -610,6 +625,22 @@ object PoetServer {
                         requester.invoke()
                         noContent()
                     }
+                }
+
+                // ---------- listening journal ----------
+
+                /** Fire the native gallery picker for the journal portrait. */
+                post("/api/journal/pick-portrait") {
+                    val requester = pickPortraitRequester
+                    if (requester == null) toast("Image picker unavailable") else { requester(); noContent() }
+                }
+
+                get("/api/journal/portrait") {
+                    val bytes = JournalPortrait.read(app) ?: return@get call.respond(HttpStatusCode.NotFound)
+                    // The ?v= stamp changes on every replacement, so the image
+                    // may be cached hard until the portrait actually changes.
+                    call.response.header("Cache-Control", "max-age=3600")
+                    call.respondBytes(bytes, ContentType.parse(JournalPortrait.mime(db)))
                 }
 
                 // ---------- media ----------

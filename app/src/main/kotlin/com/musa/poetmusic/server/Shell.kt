@@ -13,6 +13,18 @@ object Shell {
     val CANVAS_TINTS = mapOf("Lavender" to "#f2effa", "Cream" to "#faf5ec", "Sage" to "#eff6f0")
     val ACCENTS = listOf("#b9a5ec", "#9fd8c0", "#f4b89a", "#a5c9ec")
 
+    /**
+     * The Poet mark: three vertical bars — equaliser and stanza at once —
+     * inside a rounded frame. Drawn in currentColor so it inherits the ink
+     * tone .hdr-logo sets over the accent tile, in either theme.
+     */
+    const val LOGO_SVG =
+        """<svg viewBox="0 0 512 512" style="width:100%; height:100%;" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">""" +
+            """<rect x="20" y="20" width="472" height="472" rx="100" stroke="currentColor" stroke-width="40"></rect>""" +
+            """<rect x="160" y="180" width="40" height="152" rx="20" fill="currentColor"></rect>""" +
+            """<rect x="236" y="100" width="40" height="312" rx="20" fill="currentColor"></rect>""" +
+            """<rect x="312" y="240" width="40" height="172" rx="20" fill="currentColor"></rect></svg>"""
+
     fun page(accent: String, theme: String, folderCount: Int, dark: Boolean): String {
         val bg = CANVAS_TINTS[theme] ?: CANVAS_TINTS.getValue("Lavender")
         return """<!DOCTYPE html>
@@ -55,6 +67,8 @@ object Shell {
   --track-empty: rgba(59,54,81,0.12);
   --panel-strong: #3b3651;
   --panel-strong-text: #f5f3fa;
+  /* journal metric tiles: the canvas tint, inset into the white card */
+  --inset-bg: $bg;
 }
 </style>
 <link rel="stylesheet" href="/assets/poet.css">
@@ -62,8 +76,8 @@ object Shell {
 <body>
 <div id="app">
   <div class="hdr">
-    <div class="hdr-brand" onclick="poetGo('/screens/library')">
-      <div class="hdr-logo">P</div>
+    <div class="hdr-brand" onclick="poetGo('/screens/journal')">
+      <div class="hdr-logo">$LOGO_SVG</div>
       <div class="hdr-name">Poet</div>
     </div>
     <div style="display:flex; gap:8px;">

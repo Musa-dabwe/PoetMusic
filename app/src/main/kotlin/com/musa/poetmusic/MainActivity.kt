@@ -21,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.musa.poetmusic.data.JournalPortrait
 import com.musa.poetmusic.data.LibraryScanner
 import com.musa.poetmusic.data.TagEditor
 import com.musa.poetmusic.playback.PlaybackService
@@ -75,6 +76,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Gallery image picker for the Listening Journal's portrait badge. */
+    private val pickPortrait = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        thread {
+            val db = (application as PoetApp).db
+            val ok = runCatching {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: return@runCatching false
+                if (bytes.size > MAX_ART_BYTES) return@runCatching false
+                val mime = contentResolver.getType(uri)?.takeIf { it.startsWith("image/") } ?: "image/jpeg"
+                JournalPortrait.save(this@MainActivity, db, bytes, mime)
+            }.getOrDefault(false)
+            if (ok) runJs("poetPortraitPicked(); poetToast('Portrait updated');")
+            else runJs("poetToast('Could not load that image (max 8 MB).');")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -112,6 +130,9 @@ class MainActivity : AppCompatActivity() {
         }
         PoetServer.pickArtRequester = {
             runOnUiThread { runCatching { pickArt.launch("image/*") } }
+        }
+        PoetServer.pickPortraitRequester = {
+            runOnUiThread { runCatching { pickPortrait.launch("image/*") } }
         }
         LibraryScanner.onFinished = {
             runJs("poetToast('Library scan finished'); if (poetScreenUrl.indexOf('/screens/library') === 0) poetGo(poetScreenUrl);")
@@ -259,6 +280,7 @@ class MainActivity : AppCompatActivity() {
         PoetServer.addFolderRequester = null
         PoetServer.pinWidgetRequester = null
         PoetServer.pickArtRequester = null
+        PoetServer.pickPortraitRequester = null
         TagEditor.clearPendingArt()
         // Drop the WebView cache including the disk files, so album art HTTP
         // responses don't outlive the session. 'true' is required: with

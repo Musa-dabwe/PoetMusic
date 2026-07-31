@@ -44,8 +44,8 @@ object TagEditor {
         val isMp3 = track.displayName.endsWith(".mp3", ignoreCase = true)
 
         val cleanTitle = form.title.trim().ifBlank { track.title }
-        val cleanArtist = form.artist.trim().ifBlank { "Unknown artist" }
-        val cleanAlbum = form.album.trim().ifBlank { "Unknown album" }
+        val cleanArtist = form.artist.trim().ifBlank { MusicDatabase.UNKNOWN_ARTIST }
+        val cleanAlbum = form.album.trim().ifBlank { MusicDatabase.UNKNOWN_ALBUM }
         val cleanAlbumArtist = form.albumArtist.trim()
         val cleanGenre = form.genre.trim()
         val cleanYear = form.year.trim().filter(Char::isDigit).take(4)
