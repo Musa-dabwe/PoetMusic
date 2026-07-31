@@ -9,56 +9,42 @@ import com.musa.poetmusic.data.TopTrack
 import java.util.Locale
 
 /**
- * Listening Journal: a full-screen "wrapped" report over the local library and
- * the plays log, reached by tapping the Poet mark in the header. Everything on
- * the screen is derived from the database — the library totals, tag health and
- * format mix from the tracks table, the leaderboards and habits from the plays
+ * Listening Journal: a full-screen report over the local library and the plays
+ * log, reached by tapping the Poet mark in the header. Everything on the screen
+ * is derived from the database — the library totals, tag health and format mix
+ * from the tracks table, the leaderboards and habits from the plays
  * PlayerController writes once a song has actually been listened to.
  *
- * The screen has two depths: collapsed shows the first [SHORT_TOP] of each
- * leaderboard, "Show Wrapped" reveals everything the database read returned.
+ * The leaderboards render at whatever depth the database read returned
+ * (MusicDatabase.JOURNAL_TOP_N), so the screen has a single depth.
  */
 object JournalViews {
-
-    /** Leaderboard entries shown before "Show Wrapped" is turned on. */
-    private const val SHORT_TOP = 5
-
-    /** Genre chips shown collapsed / expanded. */
-    private const val SHORT_GENRES = 6
 
     fun journalScreen(
         stats: JournalStats,
         hasPortrait: Boolean,
-        portraitStamp: String,
-        detail: Boolean = false
+        portraitStamp: String
     ): String = """
         <div class="screen journal-screen" data-screen="journal">
-          ${topBar(detail)}
+          ${topBar()}
           <div class="journal-body">
             ${hero(hasPortrait, portraitStamp)}
             ${totals(stats)}
-            ${personality(stats)}
-            ${rotation(stats, detail)}
+            ${rotation(stats)}
             ${habits(stats)}
             ${health(stats)}
             <button class="journal-return" hx-get="/screens/library" hx-target="#main-container">Return to library</button>
           </div>
         </div>"""
 
-    /**
-     * Sticky bar: the way back to the library, and the depth toggle. Both are
-     * plain htmx gets so the server stays the only place the depth is decided.
-     */
-    private fun topBar(detail: Boolean): String = """
+    /** Sticky bar carrying the way back to the library. */
+    private fun topBar(): String = """
         <div class="journal-bar">
           <div class="journal-bar-inner">
             <button class="journal-back" hx-get="/screens/library" hx-target="#main-container" aria-label="Back to library">
               <svg width="16" height="12" viewBox="0 0 16 12"><path d="M6 1 L1 6 L6 11 M1 6 L15 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
             </button>
             <div class="journal-bar-title">Listening Journal</div>
-            <button class="journal-toggle" hx-get="/screens/journal${if (detail) "" else "?detail=1"}" hx-target="#main-container">
-              ${if (detail) "Show less" else "Show Wrapped"}
-            </button>
           </div>
         </div>"""
 
@@ -105,62 +91,21 @@ object JournalViews {
           <div class="journal-tile-label">$label</div>
         </div>"""
 
-    /** The listener-personality card, read off the shape of the plays log. */
-    private fun personality(s: JournalStats): String {
-        val (name, desc) = personalityFor(s)
-        return """
-        <div class="journal-personality">
-          <div class="journal-personality-kicker">Your listener personality</div>
-          <div class="journal-personality-name">${esc(name)}</div>
-          <div class="journal-personality-desc">$desc</div>
-        </div>"""
-    }
-
-    /**
-     * Which listener the plays log describes, and the sentence backing it up.
-     * Repeat share comes first because it is the strongest signal — someone who
-     * replays the same records reads as devoted whatever hour they do it at.
-     */
-    fun personalityFor(s: JournalStats): Pair<String, String> {
-        if (s.totalPlays == 0) {
-            return "The Newcomer" to
-                "Nothing is in rotation yet. Play a song for $PLAY_THRESHOLD_LABEL and this page starts keeping score."
-        }
-        val repeatPct = percent(s.totalPlays - s.exploredTracks, s.totalPlays)
-        val hour = s.peakHour?.hour
-        val nightOwl = hour != null && (hour >= 21 || hour <= 4)
-        return when {
-            repeatPct >= 60 -> "The Devoted Fan" to
-                """You return to the same records again and again — ${strong("$repeatPct%")} of your plays
-                   are songs you had already heard. Comfort over novelty, and you know exactly what you like."""
-            repeatPct >= 35 -> "The Deep Diver" to
-                """You sit with a record before moving on: ${strong("$repeatPct%")} of your plays are repeats,
-                   spread across ${strong("${fmtCount(s.exploredTracks)} ${plural(s.exploredTracks, "track")}")} you have opened up."""
-            nightOwl -> "The Night Owl" to
-                """Your listening peaks at ${strong(clockHour(hour!!))} — squarely ${strong(hourLabel(hour).lowercase(Locale.US))} —
-                   and you keep reaching for something you have not heard yet."""
-            else -> "The Explorer" to
-                """You keep moving: ${strong("${fmtCount(s.exploredTracks)} ${plural(s.exploredTracks, "track")}")}
-                   of your archive have been opened, and only ${strong("$repeatPct%")} of your plays are repeats."""
-        }
-    }
-
     /** Everything the plays log ranks: artists, songs, albums and genres. */
-    private fun rotation(s: JournalStats, detail: Boolean): String {
+    private fun rotation(s: JournalStats): String {
         if (s.totalPlays == 0) {
             return """
             ${sectionHead("Heavy Rotation")}
             <div class="journal-empty">Nothing in rotation yet — play a song for $PLAY_THRESHOLD_LABEL
               and it starts counting towards your journal.</div>"""
         }
-        val take = if (detail) Int.MAX_VALUE else SHORT_TOP
         return """
         ${sectionHead("Top Artists")}
-        ${artistGrid(s.topArtists.take(take))}
+        ${artistGrid(s.topArtists)}
         ${sectionHead("Top Songs")}
-        ${songList(s.topSongs.take(take))}
-        ${albumSection(s.topAlbums.take(take))}
-        ${genreSection(s.topGenres.take(if (detail) Int.MAX_VALUE else SHORT_GENRES))}"""
+        ${songList(s.topSongs)}
+        ${albumSection(s.topAlbums)}
+        ${genreSection(s.topGenres)}"""
     }
 
     private fun artistGrid(artists: List<TopArtist>): String = """
@@ -168,8 +113,13 @@ object JournalViews {
           ${artists.mapIndexed { i, a -> artistCell(i, a) }.joinToString("")}
         </div>"""
 
+    /**
+     * Tapping the cell opens the same artist screen the Artists tab opens, so
+     * a name in the leaderboard is a way into that artist's songs.
+     */
     private fun artistCell(index: Int, a: TopArtist): String = """
-        <div class="journal-artist">
+        <div class="journal-artist" role="button" tabindex="0"
+             hx-get="/screens/artist?name=${enc(a.artist)}" hx-target="#main-container">
           <div class="journal-artist-face" style="background:${artColor(index.toLong())};">${esc(initials(a.artist))}</div>
           <div style="min-width:0;">
             <div class="journal-artist-name">${esc(a.artist)}</div>
@@ -195,7 +145,8 @@ object JournalViews {
     /**
      * Albums scroll sideways as covers. An album with no embedded art anywhere
      * falls back to a tinted tile carrying its initials, the same placeholder
-     * the library rows use.
+     * the library rows use. Tapping a card opens the same album screen the
+     * Albums tab opens.
      */
     private fun albumSection(albums: List<TopAlbum>): String {
         if (albums.isEmpty()) return ""
@@ -204,7 +155,8 @@ object JournalViews {
                 if (al.artTrackId > 0) """<img loading="lazy" src="/api/art/${al.artTrackId}" alt="">"""
                 else """<span class="journal-album-initials">${esc(initials(al.album))}</span>"""
             """
-            <div class="journal-album">
+            <div class="journal-album" role="button" tabindex="0"
+                 hx-get="/screens/album?album=${enc(al.album)}&artist=${enc(al.artist)}" hx-target="#main-container">
               <div class="journal-album-cover" style="background:${artColor(i.toLong())};">
                 $cover
                 <div class="journal-album-rank">#${i + 1}</div>

@@ -705,7 +705,6 @@ function poetPickPortrait() {
    re-rendered screen carries a fresh ?v= stamp, so the new portrait shows
    instead of the cached one */
 function poetPortraitPicked() {
-  /* prefix match: the journal URL also carries the ?detail= depth toggle */
   if (poetScreenUrl.indexOf('/screens/journal') === 0) poetGo(poetScreenUrl);
 }
 
