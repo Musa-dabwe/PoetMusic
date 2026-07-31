@@ -100,6 +100,27 @@ class ShellTest {
     }
 
     @Test
+    fun `the brand mark opens the listening journal`() {
+        assertTrue(page().contains("""<div class="hdr-brand" onclick="poetGo('/screens/journal')">"""))
+    }
+
+    @Test
+    fun `the header logo is the poet mark rather than a letter`() {
+        val html = page()
+        assertFalse("the letter mark is gone", html.contains("""<div class="hdr-logo">P</div>"""))
+        assertTrue(html.contains("""<div class="hdr-logo"><svg viewBox="0 0 512 512""""))
+        // The frame plus three bars, all inheriting .hdr-logo's ink colour so
+        // the mark stays legible on every accent and in either theme.
+        assertEquals(4, Regex("currentColor").findAll(Shell.LOGO_SVG).count())
+        assertTrue(Shell.LOGO_SVG.contains("""style="width:100%; height:100%;""""))
+    }
+
+    @Test
+    fun `the journal metric inset follows the selected canvas tint`() {
+        assertTrue(page(theme = "Cream").contains("--inset-bg: #faf5ec;"))
+    }
+
+    @Test
     fun `shuffle and repeat icon arrays are sized for their mode indices`() {
         val html = page()
         assertEquals(1, Regex("""var ICON_SHUFFLE = \[""").findAll(html).count())

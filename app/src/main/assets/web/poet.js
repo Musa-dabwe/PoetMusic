@@ -104,8 +104,11 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
     var path = e.detail.pathInfo && (e.detail.pathInfo.finalRequestPath || e.detail.pathInfo.requestPath);
     if (path && path.indexOf('/screens/') === 0) poetScreenUrl = path;
     var lib = document.getElementById('nav-library'), set = document.getElementById('nav-settings');
-    lib.classList.toggle('active', poetScreenUrl.indexOf('/screens/settings') !== 0);
-    set.classList.toggle('active', poetScreenUrl.indexOf('/screens/settings') === 0);
+    /* the journal hangs off the brand mark, not off either nav pill */
+    var onSettings = poetScreenUrl.indexOf('/screens/settings') === 0;
+    var onJournal = poetScreenUrl.indexOf('/screens/journal') === 0;
+    lib.classList.toggle('active', !onSettings && !onJournal);
+    set.classList.toggle('active', onSettings);
     /* Sync the shown-track marker with what was actually rendered. Resetting
        it to -1 here made every poll re-fetch the whole Now Playing screen
        once a second — a permanent full-screen flicker. */
@@ -689,6 +692,17 @@ function poetLrcExport() {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'lrc=' + encodeURIComponent(text)
   });
+}
+
+/* ---- listening journal ---- */
+function poetPickPortrait() {
+  fetch('/api/journal/pick-portrait', { method: 'POST' });
+}
+/* called from native (MainActivity) once the gallery image is stored; the
+   re-rendered screen carries a fresh ?v= stamp, so the new portrait shows
+   instead of the cached one */
+function poetPortraitPicked() {
+  if (poetScreenUrl === '/screens/journal') poetGo('/screens/journal');
 }
 
 /* back-button support: Android calls poetBack() */

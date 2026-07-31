@@ -14,7 +14,7 @@ import android.database.sqlite.SQLiteOpenHelper
  * pages are returned to the OS via incremental auto-vacuum, keeping the
  * on-disk footprint tight.
  */
-class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 3) {
+class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 4) {
 
     init {
         setWriteAheadLoggingEnabled(true)
@@ -94,6 +94,19 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
                 value TEXT NOT NULL
             )"""
         )
+        createPlaysTable(db)
+    }
+
+    /** Append-only listening log behind the Listening Journal's play counts. */
+    private fun createPlaysTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE plays(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_id INTEGER NOT NULL,
+                played_at INTEGER NOT NULL
+            )"""
+        )
+        db.execSQL("CREATE INDEX idx_plays_track ON plays(track_id)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -107,6 +120,9 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             db.execSQL("ALTER TABLE tracks ADD COLUMN disc_no INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE tracks ADD COLUMN composer TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE tracks ADD COLUMN comment TEXT NOT NULL DEFAULT ''")
+        }
+        if (oldVersion < 4) {
+            createPlaysTable(db)
         }
     }
 
@@ -147,7 +163,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         transaction(db) {
             db.delete("tracks", "folder_id=?", arrayOf(id.toString()))
             db.delete("folders", "id=?", arrayOf(id.toString()))
-            pruneOrphanPlaylistEntries(db)
+            pruneOrphanRows(db)
         }
     }
 
@@ -196,12 +212,14 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
                 while (c.moveToNext()) if (c.getString(1) !in seenUris) stale += c.getLong(0)
             }
             stale.forEach { db.delete("tracks", "id=?", arrayOf(it.toString())) }
-            if (stale.isNotEmpty()) pruneOrphanPlaylistEntries(db)
+            if (stale.isNotEmpty()) pruneOrphanRows(db)
         }
     }
 
-    private fun pruneOrphanPlaylistEntries(db: SQLiteDatabase) {
+    /** Drop playlist entries and journal plays that point at tracks that are gone. */
+    private fun pruneOrphanRows(db: SQLiteDatabase) {
         db.execSQL("DELETE FROM playlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)")
+        db.execSQL("DELETE FROM plays WHERE track_id NOT IN (SELECT id FROM tracks)")
     }
 
     private fun trackFrom(c: Cursor) = Track(
@@ -320,6 +338,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         transaction(db) {
             db.delete("tracks", "id=?", arrayOf(id.toString()))
             db.delete("playlist_tracks", "track_id=?", arrayOf(id.toString()))
+            db.delete("plays", "track_id=?", arrayOf(id.toString()))
         }
     }
 
@@ -347,6 +366,104 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
                GROUP BY artist ORDER BY artist COLLATE NOCASE""", null
         ).use { c -> while (c.moveToNext()) out += ArtistRow(c.getString(0), c.getInt(1), c.getLong(2)) }
         return out
+    }
+
+    // ---------- listening journal ----------
+
+    /** Append one listen to the plays log (see PlayerController's play threshold). */
+    fun recordPlay(trackId: Long, playedAt: Long = System.currentTimeMillis()) {
+        val cv = ContentValues().apply { put("track_id", trackId); put("played_at", playedAt) }
+        writableDatabase.insert("plays", null, cv)
+    }
+
+    /**
+     * The whole Listening Journal in one read: library totals, tag health and
+     * the heavy-rotation leaders. The "unknown" defaults the scanner writes for
+     * untagged files count as missing tags, not as filled ones.
+     */
+    fun journalStats(): JournalStats {
+        val db = readableDatabase
+        var trackCount = 0
+        var totalDuration = 0L
+        var filledTagFields = 0
+        var missingArt = 0
+        var syncedLyrics = 0
+        db.rawQuery(
+            """SELECT COUNT(*), COALESCE(SUM(duration_ms),0),
+                      COALESCE(SUM(
+                        (CASE WHEN artist <> '' AND artist <> ? THEN 1 ELSE 0 END) +
+                        (CASE WHEN album <> '' AND album <> ? THEN 1 ELSE 0 END) +
+                        (CASE WHEN genre <> '' THEN 1 ELSE 0 END) +
+                        (CASE WHEN year <> '' THEN 1 ELSE 0 END) +
+                        (CASE WHEN track_no > 0 THEN 1 ELSE 0 END) +
+                        (CASE WHEN album_artist <> '' THEN 1 ELSE 0 END)
+                      ),0),
+                      COALESCE(SUM(CASE WHEN has_art = 0 THEN 1 ELSE 0 END),0),
+                      COALESCE(SUM(CASE WHEN lrc_uri IS NOT NULL AND lrc_uri <> '' THEN 1 ELSE 0 END),0)
+               FROM tracks""",
+            arrayOf(UNKNOWN_ARTIST, UNKNOWN_ALBUM)
+        ).use { c ->
+            if (c.moveToFirst()) {
+                trackCount = c.getInt(0)
+                totalDuration = c.getLong(1)
+                filledTagFields = c.getInt(2)
+                missingArt = c.getInt(3)
+                syncedLyrics = c.getInt(4)
+            }
+        }
+
+        var albumCount = 0
+        db.rawQuery("SELECT COUNT(*) FROM (SELECT 1 FROM tracks GROUP BY album, artist)", null).use { c ->
+            if (c.moveToFirst()) albumCount = c.getInt(0)
+        }
+
+        var totalPlays = 0
+        db.rawQuery("SELECT COUNT(*) FROM plays", null).use { c ->
+            if (c.moveToFirst()) totalPlays = c.getInt(0)
+        }
+
+        var topTrack: TopTrack? = null
+        db.rawQuery(
+            """SELECT t.title, t.artist, COUNT(*) AS plays
+               FROM plays p JOIN tracks t ON t.id = p.track_id
+               GROUP BY p.track_id ORDER BY plays DESC, t.title COLLATE NOCASE LIMIT 1""", null
+        ).use { c ->
+            if (c.moveToFirst()) topTrack = TopTrack(c.getString(0), c.getString(1), c.getInt(2))
+        }
+
+        var topArtist: TopArtist? = null
+        db.rawQuery(
+            """SELECT t.artist, COUNT(*) AS plays
+               FROM plays p JOIN tracks t ON t.id = p.track_id
+               GROUP BY t.artist ORDER BY plays DESC, t.artist COLLATE NOCASE LIMIT 1""", null
+        ).use { c ->
+            if (c.moveToFirst()) topArtist = TopArtist(c.getString(0), c.getInt(1))
+        }
+
+        // played_at is a wall-clock millisecond stamp; SQLite's date functions
+        // take seconds, and 'localtime' buckets by the device's current zone.
+        var peakHour: PeakHour? = null
+        db.rawQuery(
+            """SELECT CAST(strftime('%H', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour,
+                      COUNT(*) AS plays
+               FROM plays GROUP BY hour ORDER BY plays DESC, hour LIMIT 1""", null
+        ).use { c ->
+            if (c.moveToFirst()) peakHour = PeakHour(c.getInt(0), c.getInt(1))
+        }
+
+        return JournalStats(
+            trackCount = trackCount,
+            albumCount = albumCount,
+            totalDurationMs = totalDuration,
+            filledTagFields = filledTagFields,
+            totalTagFields = trackCount * CORE_TAG_FIELDS,
+            missingArt = missingArt,
+            syncedLyrics = syncedLyrics,
+            totalPlays = totalPlays,
+            topTrack = topTrack,
+            topArtist = topArtist,
+            peakHour = peakHour
+        )
     }
 
     // ---------- playlists ----------
@@ -417,5 +534,17 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
                WHERE pt.playlist_id=? ORDER BY pt.position""", arrayOf(playlistId.toString())
         ).use { c -> while (c.moveToNext()) out += trackFrom(c) }
         return out
+    }
+
+    companion object {
+        /** Placeholders the scanner writes when a file carries no artist/album tag. */
+        const val UNKNOWN_ARTIST = "Unknown artist"
+        const val UNKNOWN_ALBUM = "Unknown album"
+
+        /**
+         * Tag fields the journal's integrity index scores per track: artist,
+         * album, genre, year, track number and album artist.
+         */
+        const val CORE_TAG_FIELDS = 6
     }
 }

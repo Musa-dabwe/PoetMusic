@@ -36,6 +36,9 @@ html[data-theme="dark"] {
   --track-empty: rgba(255,255,255,0.16);
   --panel-strong: #26262e;
   --panel-strong-text: #f0f0f5;
+  /* dark canvas is darker than the card, so the journal's inset tiles lift
+     off the card instead of matching --bg the way they do in light mode */
+  --inset-bg: #26262e;
 }
 html[data-theme="dark"] input::placeholder, html[data-theme="dark"] textarea::placeholder { color: #6f6b82; }
 /* accent-faint chips lose too much contrast over dark cards */
@@ -76,7 +79,10 @@ button { font-family: inherit; color: var(--ink); }
 /* header */
 .hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 10px 20px; }
 .hdr-brand { display:flex; align-items:center; gap:10px; cursor:pointer; }
-.hdr-logo { width:30px; height:30px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; color:#3b3651; }
+/* the mark is an outlined frame, so it needs room inside the accent tile not
+   to read as a double border; color feeds the SVG's currentColor */
+.hdr-logo { width:30px; height:30px; padding:5px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; color:#3b3651; transition: transform 0.12s; }
+.hdr-brand:active .hdr-logo { transform: scale(0.92); }
 .hdr-name { font-size:20px; font-weight:700; letter-spacing:-0.02em; }
 .navpill { border:none; cursor:pointer; padding:8px 14px; border-radius:99px; font-size:13px; font-weight:600; background:transparent; transition: background 0.15s, transform 0.12s; }
 .navpill:active { transform: scale(0.95); }
@@ -235,6 +241,33 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .lyrics-deck { position:relative; width:100%; max-width:340px; margin:16px auto 0 auto; background:var(--lyrics-glass); backdrop-filter:blur(8px); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; max-height:38vh; overflow-y:auto; overscroll-behavior:contain; }
 .lyric { font-size:13px; font-weight:500; color:var(--lyric-dim); transition: all 0.3s; }
 .lyric.active { font-size:16px; font-weight:700; color:var(--ink); }
+
+/* listening journal */
+/* padding-top leaves room for the portrait that overhangs the card; the badge
+   is positioned from the wrapper's top edge so nothing overflows the screen */
+.journal-wrap { position:relative; padding-top:46px; }
+.journal-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:24px; padding:62px 24px 28px 24px; box-shadow:0 2px 14px var(--shadow-card); }
+.journal-title { text-align:center; font-size:26px; font-weight:700; letter-spacing:-0.03em; }
+.journal-kicker { text-align:center; font-size:12px; font-weight:600; letter-spacing:0.09em; text-transform:uppercase; color:var(--faint); margin-top:7px; }
+.journal-lede { font-size:15px; line-height:1.65; color:var(--muted); margin-top:20px; }
+.journal-strong { font-weight:700; color:var(--ink); }
+.journal-rule { height:1px; background:var(--divider); margin:24px 0; }
+.journal-section { display:flex; align-items:center; gap:10px; }
+.journal-section-bar { width:4px; height:17px; border-radius:2px; background:var(--accent); }
+.journal-section-name { font-size:17px; font-weight:700; letter-spacing:-0.02em; }
+.journal-list { display:flex; flex-direction:column; gap:14px; margin-top:16px; }
+.journal-bullet { display:flex; gap:12px; align-items:flex-start; font-size:14.5px; line-height:1.6; color:var(--muted); }
+.journal-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:7px; }
+.journal-metrics { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+.journal-metric { display:flex; align-items:center; justify-content:space-between; gap:14px; background:var(--inset-bg); border-radius:13px; padding:13px 15px; }
+.journal-metric-name { font-size:14px; font-weight:700; }
+.journal-metric-value { font-size:13.5px; color:var(--muted); text-align:right; }
+.journal-portrait { position:absolute; top:0; left:50%; transform:translateX(-50%); width:92px; height:92px; cursor:pointer; }
+.journal-portrait:active { transform:translateX(-50%) scale(0.96); }
+.journal-portrait-ring { width:92px; height:92px; border-radius:50%; border:4px solid var(--card-bg); overflow:hidden; box-shadow:0 3px 12px var(--shadow-card); background:var(--accent-faint); display:flex; align-items:center; justify-content:center; }
+.journal-portrait-ring img { width:100%; height:100%; object-fit:cover; }
+.journal-portrait-empty { text-align:center; font-size:10px; font-weight:600; line-height:1.3; color:var(--muted); }
+.journal-portrait-edit { position:absolute; right:-2px; bottom:2px; width:27px; height:27px; border-radius:50%; background:var(--accent); border:3px solid var(--card-bg); display:flex; align-items:center; justify-content:center; }
 
 /* settings */
 .folder-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; background:var(--accent-faint); }
