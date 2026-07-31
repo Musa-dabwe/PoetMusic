@@ -108,6 +108,9 @@ object PlayerController {
     /** A song counts as played once this much of it has been heard. */
     private const val PLAY_THRESHOLD_MS = 20_000L
 
+    /** Previous restarts the song after 3 s unless Settings says otherwise. */
+    const val DEFAULT_PREV_RESTART_MS = 3_000L
+
     private val refresher = object : Runnable {
         override fun run() {
             // Enforce the sleep deadline against the wall clock here rather
@@ -153,6 +156,7 @@ object PlayerController {
     /** Give the controller a settings store so playback state survives restarts. */
     fun bindStore(db: MusicDatabase) {
         store = db
+        prevRestartMs = readPrevRestartMs(db)
     }
 
     fun detach() {
@@ -533,8 +537,29 @@ object PlayerController {
 
     fun next() = onMain { it.seekToNextMediaItem() }
 
+    /**
+     * Previous restarts the current song once [prevRestartMs] of it has played,
+     * and steps back before that. 0 means never restart — Previous always goes
+     * to the previous song. Cached in memory so the main thread doesn't read
+     * the settings table on every tap.
+     */
+    @Volatile var prevRestartMs: Long = DEFAULT_PREV_RESTART_MS; private set
+
+    /** The persisted threshold, clamped to the range the Settings card offers. */
+    fun readPrevRestartMs(db: MusicDatabase): Long =
+        db.getSetting("prev_restart_ms", DEFAULT_PREV_RESTART_MS.toString())
+            .toLongOrNull()?.coerceIn(0, 30_000) ?: DEFAULT_PREV_RESTART_MS
+
+    fun setPrevRestartMs(db: MusicDatabase, ms: Long) {
+        val v = ms.coerceIn(0, 30_000)
+        db.setSetting("prev_restart_ms", v.toString())
+        prevRestartMs = v
+    }
+
     fun previous() = onMain { p ->
-        if (p.currentPosition > 3000 || !p.hasPreviousMediaItem()) p.seekTo(0)
+        val threshold = prevRestartMs
+        val restart = threshold > 0 && p.currentPosition > threshold
+        if (restart || !p.hasPreviousMediaItem()) p.seekTo(0)
         else p.seekToPreviousMediaItem()
     }
 

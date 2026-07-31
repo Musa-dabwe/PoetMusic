@@ -375,6 +375,40 @@ body.journal-open #main-container { padding:0; }
 .radio { width:20px; height:20px; border-radius:50%; border:2px solid var(--ink); box-sizing:border-box;
   display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .radio-dot { width:10px; height:10px; border-radius:50%; background:var(--ink); animation:poet-pop 0.25s ease; }
+/* the grouped tabs carry only a sort button, right-aligned above their tiles */
+.tabbar { display:flex; justify-content:flex-end; margin-bottom:14px; }
+
+/* paged tracklists: the sentinel that fetches the next page in place */
+.load-more { border:none; cursor:pointer; width:100%; margin-top:6px; padding:14px; border-radius:14px;
+  background:var(--overlay-neutral); color:var(--ink); font-family:inherit; font-size:13px; font-weight:700; }
+.load-more:active { transform: scale(0.98); }
+.load-more-count { color:var(--muted); font-weight:600; margin-left:6px; }
+
+/* equalizer card: one vertical slider per device band */
+.eq-bands { display:flex; align-items:flex-end; justify-content:space-between; gap:6px; margin-bottom:18px; }
+.eq-band { display:flex; flex-direction:column; align-items:center; gap:8px; flex:1; min-width:0; }
+.eq-band-val { font-size:11px; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums; }
+.eq-band-hz { font-size:10px; font-weight:600; color:var(--faint); }
+.eq-slider { -webkit-appearance:slider-vertical; appearance:slider-vertical; writing-mode:vertical-lr; direction:rtl;
+  width:26px; height:120px; accent-color:var(--accent); background:transparent; cursor:pointer; }
+.eq-strength { margin-bottom:14px; }
+/* effects still render while the chain is off, dimmed to say so */
+.eq-off { opacity:0.45; }
+
+/* full-screen album art viewer */
+.art-viewer { position:fixed; inset:0; z-index:80; background:rgba(20,18,28,0.92); display:flex;
+  flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:24px; touch-action:none;
+  animation:poet-fade-in 0.18s ease; }
+.art-viewer-img { max-width:min(92vw, 520px); max-height:60vh; width:auto; height:auto; border-radius:20px;
+  object-fit:contain; box-shadow:0 24px 60px rgba(0,0,0,0.55); cursor:pointer; }
+.art-viewer-meta { text-align:center; max-width:90vw; }
+.art-viewer-title { font-size:17px; font-weight:700; color:#f5f3fa; }
+.art-viewer-artist { font-size:13px; color:rgba(245,243,250,0.7); margin-top:2px; }
+.art-viewer-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+.art-viewer-btn { border:none; cursor:pointer; font-family:inherit; font-size:13px; font-weight:700;
+  padding:12px 20px; border-radius:99px; background:var(--accent); color:#3b3651; }
+.art-viewer-btn.ghost { background:rgba(245,243,250,0.14); color:#f5f3fa; }
+.art-viewer-btn:active { transform: scale(0.96); }
 
 /* confirmation card */
 .confirm-card { width:100%; max-width:340px; background:var(--card-bg); border-radius:18px; padding:24px 22px 16px 22px;
@@ -420,6 +454,10 @@ body.journal-open #main-container { padding:0; }
   border-radius:12px; border:1.5px solid var(--card-border); background:var(--input-bg); outline:none; resize:none;
   transition:border-color 0.15s, box-shadow 0.15s; width:100%; box-sizing:border-box; }
 .ed-field textarea { font-weight:500; }
+/* batch tag editor: the keep-unchanged rule, stated once at the top */
+.ed-batch-note { font-size:12px; line-height:1.55; color:var(--muted); background:var(--overlay-faint);
+  border-radius:14px; padding:12px 14px; margin-bottom:16px; }
+.ed-batch-note strong { color:var(--ink); }
 .ed-field input:focus, .ed-field textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-faint); }
 
 /* rename card + switch */

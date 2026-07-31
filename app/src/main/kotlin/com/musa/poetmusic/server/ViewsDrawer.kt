@@ -63,8 +63,15 @@ object DrawerViews {
                     """hx-post="/api/playlist/${ctx.pid}/remove/${first.id}" hx-swap="none" hx-on::after-request="poetFinish()"""")
             else ""
 
-        val editTags = if (single) drawerItem(ICON_D_TAGS, "Edit tags",
-            """hx-get="/api/library/edit-tags/${first.id}" hx-target="#modal-root" hx-swap="innerHTML" hx-on::after-request="poetFinish()"""") else ""
+        // Single edits the whole track; a batch gets the reduced keep-unchanged
+        // form, which only ever sets the fields the user actually fills in.
+        val editTags = if (single)
+            drawerItem(ICON_D_TAGS, "Edit tags",
+                """hx-get="/api/library/edit-tags/${first.id}" hx-target="#modal-root" hx-swap="innerHTML" hx-on::after-request="poetFinish()"""")
+        else
+            drawerItem(ICON_D_TAGS, "Edit tags",
+                """hx-get="/api/library/batch-tags?ids=$ids" hx-target="#modal-root" hx-swap="innerHTML" hx-on::after-request="poetFinish()"""",
+                sub = "Set a field across all ${tracks.size}")
 
         val navSection = if (single) """
           <div class="dsec">Navigation &amp; info</div>
@@ -106,7 +113,8 @@ object DrawerViews {
           ${drawerItem(ICON_D_SETAS, "Set as…",
             """hx-get="/api/library/sub?kind=setas&$q" hx-target="#sheet-root" hx-swap="innerHTML"""",
             sub = "Ringtone, notification, alarm", chevron = true)}
-          ${drawerItem(ICON_D_SHARE, "Share", """onclick="poetToast('Opening share sheet…'); poetFinish();"""")}
+          ${drawerItem(ICON_D_SHARE, if (single) "Share" else "Share ${tracks.size} songs",
+            """hx-post="/api/tracks/share?ids=$ids" hx-swap="none" hx-on::after-request="poetFinish()"""")}
 
           $navSection
         </div>"""

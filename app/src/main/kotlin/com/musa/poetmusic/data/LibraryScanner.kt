@@ -25,6 +25,43 @@ object LibraryScanner {
 
     @Volatile var onFinished: (() -> Unit)? = null
 
+    /** Epoch millis of the last completed scan; 0 when never scanned. */
+    const val KEY_LAST_SCAN_AT = "last_scan_at"
+
+    /** Whether the library is kept in sync without the user asking. */
+    const val KEY_AUTO = "scan_auto"
+
+    /** Hours between automatic startup rescans. */
+    const val KEY_INTERVAL_H = "scan_interval_h"
+
+    const val DEFAULT_INTERVAL_H = 12
+
+    /** Interval choices offered in Settings, in hours. */
+    val INTERVAL_CHOICES = listOf(6, 12, 24)
+
+    fun autoScanEnabled(db: MusicDatabase): Boolean = db.getSetting(KEY_AUTO, "1") == "1"
+
+    fun intervalHours(db: MusicDatabase): Int =
+        db.getSetting(KEY_INTERVAL_H, DEFAULT_INTERVAL_H.toString()).toIntOrNull()
+            ?.takeIf { it in INTERVAL_CHOICES } ?: DEFAULT_INTERVAL_H
+
+    fun lastScanAt(db: MusicDatabase): Long = db.getSetting(KEY_LAST_SCAN_AT, "0").toLongOrNull() ?: 0
+
+    /**
+     * Rescan on app start when the library has gone stale — the user should
+     * never have to remember to press Trigger scan. An empty library is left
+     * alone: there is nothing to refresh, and the first scan is triggered by
+     * adding a folder. Returns whether a scan was actually started.
+     */
+    fun maybeAutoScan(context: Context, db: MusicDatabase): Boolean {
+        if (!autoScanEnabled(db)) return false
+        if (db.folders().isEmpty() || db.trackCount() == 0) return false
+        val age = System.currentTimeMillis() - lastScanAt(db)
+        if (age < intervalHours(db) * 3_600_000L) return false
+        startScan(context, db)
+        return true
+    }
+
     fun startScan(context: Context, db: MusicDatabase) {
         if (!running.compareAndSet(false, true)) return
         isScanning = true
@@ -46,6 +83,7 @@ object LibraryScanner {
                 }
                 val stamp = SimpleDateFormat("MMM d, HH:mm", Locale.US).format(Date())
                 db.setSetting("last_scan", "Last scanned $stamp — ${db.trackCount()} tracks")
+                db.setSetting(KEY_LAST_SCAN_AT, System.currentTimeMillis().toString())
             } finally {
                 isScanning = false
                 running.set(false)

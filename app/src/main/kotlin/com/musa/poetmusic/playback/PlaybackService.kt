@@ -2,6 +2,7 @@ package com.musa.poetmusic.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -71,6 +72,7 @@ class PlaybackService : MediaSessionService() {
             // off, and local playback cuts out mid-song.
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        attachAudioEffects(player)
         // Keep the notification heart in sync with the track being played.
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = refreshFavouriteButton()
@@ -116,6 +118,23 @@ class PlaybackService : MediaSessionService() {
         return super.onStartCommand(intent, flags, startId)
     }
 
+    /**
+     * Bind the equalizer chain to the player's audio session. The session id is
+     * allocated here and pushed into ExoPlayer rather than read back from it:
+     * a freshly built player has no session until the audio sink is
+     * initialised, so reading would mean racing the first track. Allocating it
+     * up front means the effects are attached before anything can be queued.
+     */
+    private fun attachAudioEffects(player: ExoPlayer) {
+        val db = (application as? PoetApp)?.db ?: return
+        val audio = getSystemService(AudioManager::class.java) ?: return
+        val sessionId = runCatching { audio.generateAudioSessionId() }.getOrDefault(AudioManager.ERROR)
+        if (sessionId == AudioManager.ERROR) return
+        runCatching { player.audioSessionId = sessionId }
+            .onFailure { return }
+        AudioFx.attach(sessionId, db)
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -127,6 +146,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         PlayerController.detach()
+        // Release the effects before the player: they hold the audio session.
+        AudioFx.release()
         mediaSession?.run {
             player.release()
             release()

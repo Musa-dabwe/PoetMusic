@@ -111,6 +111,90 @@ object TagEditor {
         return Result(true, fileMessage, artChanged)
     }
 
+    // ---------------- batch editing ----------------
+
+    /**
+     * The reduced form the multi-select tag editor submits. Every field is a
+     * plain string and **blank means "leave unchanged"** — that sentinel is
+     * what makes a batch edit safe: submitting only an artist rewrites the
+     * artist of every selected track and touches nothing else.
+     */
+    data class BatchForm(
+        val title: String = "", val artist: String = "", val album: String = "",
+        val albumArtist: String = "", val genre: String = "", val year: String = "",
+        val trackNo: String = ""
+    ) {
+        /** Nothing to do when the user submitted an entirely blank form. */
+        fun isEmpty(): Boolean = listOf(title, artist, album, albumArtist, genre, year, trackNo)
+            .all { it.isBlank() }
+    }
+
+    data class BatchResult(val written: Int, val libraryOnly: Int, val failed: Int) {
+        val touched: Int get() = written + libraryOnly
+
+        val message: String
+            get() = when {
+                touched == 0 -> "Couldn't update any of the selected tracks"
+                failed > 0 -> "Updated $touched, $failed failed"
+                libraryOnly > 0 && written == 0 -> "Updated $touched in the library (file tags support MP3 only)"
+                libraryOnly > 0 -> "Updated $touched — $libraryOnly saved to the library only"
+                touched == 1 -> "Tags written to 1 file"
+                else -> "Tags written to $touched files"
+            }
+    }
+
+    /**
+     * Apply [form]'s filled-in fields to every track in [ids]. MP3s get the
+     * frames rewritten; other formats update the library only, the same rule
+     * single-track editing follows. Comment, lyrics, artwork and disc number
+     * are never part of a batch, so they are passed as null and survive.
+     */
+    fun applyBatch(context: Context, db: MusicDatabase, ids: List<Long>, form: BatchForm): BatchResult {
+        if (form.isEmpty()) return BatchResult(0, 0, 0)
+        val title = form.title.trim().takeIf { it.isNotEmpty() }
+        val artist = form.artist.trim().takeIf { it.isNotEmpty() }
+        val album = form.album.trim().takeIf { it.isNotEmpty() }
+        val albumArtist = form.albumArtist.trim().takeIf { it.isNotEmpty() }
+        val genre = form.genre.trim().takeIf { it.isNotEmpty() }
+        val year = form.year.trim().filter(Char::isDigit).take(4).takeIf { it.isNotEmpty() }
+        val trackNo = form.trackNo.trim().filter(Char::isDigit).take(4).toIntOrNull()?.takeIf { it > 0 }
+
+        var written = 0
+        var libraryOnly = 0
+        var failed = 0
+        for (id in ids) {
+            val track = db.track(id)
+            if (track == null) {
+                failed++
+                continue
+            }
+            val isMp3 = track.displayName.endsWith(".mp3", ignoreCase = true)
+            var fileOk = true
+            if (isMp3) {
+                fileOk = runCatching {
+                    writeMp3Tags(
+                        context, Uri.parse(track.uri),
+                        title, artist, album, albumArtist, genre, year, trackNo,
+                        discNo = null, composer = null, comment = null, lyrics = null,
+                        artBytes = null, artMime = null, removeArt = false
+                    )
+                }.isSuccess
+            }
+            // The library row is updated either way: a failed file write still
+            // leaves Poet's own view of the track correct and re-tryable.
+            db.updatePartialTags(
+                id, title = title, artist = artist, album = album,
+                genre = genre, year = year, trackNo = trackNo, albumArtist = albumArtist
+            )
+            when {
+                !fileOk -> failed++
+                isMp3 -> written++
+                else -> libraryOnly++
+            }
+        }
+        return BatchResult(written, libraryOnly, failed)
+    }
+
     /**
      * Fills the file name pattern with the same fallbacks the sheet's live
      * preview uses, strips characters SAF providers reject, and makes sure
@@ -190,11 +274,17 @@ object TagEditor {
     private fun lrcName(track: Track): String =
         track.displayName.substringBeforeLast('.') + ".lrc"
 
+    /**
+     * Rewrite an MP3's ID3 frames in place. Every field is nullable and null
+     * means "leave this frame exactly as it is" — that is what lets batch
+     * editing set one field across many files without blanking the rest.
+     * Single-track saves pass every field, so their behaviour is unchanged.
+     */
     private fun writeMp3Tags(
         context: Context, uri: Uri,
-        title: String, artist: String, album: String, albumArtist: String, genre: String,
-        year: String, trackNo: Int, discNo: Int, composer: String, comment: String,
-        lyrics: String, artBytes: ByteArray?, artMime: String?, removeArt: Boolean
+        title: String?, artist: String?, album: String?, albumArtist: String?, genre: String?,
+        year: String?, trackNo: Int?, discNo: Int?, composer: String?, comment: String?,
+        lyrics: String?, artBytes: ByteArray?, artMime: String?, removeArt: Boolean
     ) {
         val cacheDir = File(context.cacheDir, "tagedit").apply { mkdirs() }
         val src = File(cacheDir, "edit-src.mp3")
@@ -206,17 +296,17 @@ object TagEditor {
             }
             val mp3 = Mp3File(src.absolutePath)
             val tag = if (mp3.hasId3v2Tag()) mp3.id3v2Tag else ID3v24Tag().also { mp3.id3v2Tag = it }
-            tag.title = title
-            tag.artist = artist
-            tag.album = album
-            runCatching { tag.albumArtist = albumArtist }
-            if (genre.isNotBlank()) runCatching { tag.genreDescription = genre }
-            if (year.isNotBlank()) tag.year = year
-            if (trackNo > 0) tag.track = trackNo.toString()
-            if (discNo > 0) runCatching { tag.partOfSet = discNo.toString() }
-            runCatching { tag.composer = composer }
-            runCatching { tag.comment = comment }
-            runCatching { tag.lyrics = lyrics }
+            title?.let { tag.title = it }
+            artist?.let { tag.artist = it }
+            album?.let { tag.album = it }
+            albumArtist?.let { runCatching { tag.albumArtist = it } }
+            if (genre?.isNotBlank() == true) runCatching { tag.genreDescription = genre }
+            if (year?.isNotBlank() == true) tag.year = year
+            if (trackNo != null && trackNo > 0) tag.track = trackNo.toString()
+            if (discNo != null && discNo > 0) runCatching { tag.partOfSet = discNo.toString() }
+            composer?.let { runCatching { tag.composer = it } }
+            comment?.let { runCatching { tag.comment = it } }
+            lyrics?.let { runCatching { tag.lyrics = it } }
             if (artBytes != null) {
                 runCatching { tag.clearAlbumImage() }
                 tag.setAlbumImage(artBytes, artMime ?: "image/jpeg")
@@ -224,11 +314,11 @@ object TagEditor {
                 runCatching { tag.clearAlbumImage() }
             }
             if (mp3.hasId3v1Tag()) {
-                mp3.id3v1Tag.title = title
-                mp3.id3v1Tag.artist = artist
-                mp3.id3v1Tag.album = album
-                if (year.isNotBlank()) mp3.id3v1Tag.year = year
-                if (trackNo > 0) runCatching { mp3.id3v1Tag.track = trackNo.toString() }
+                title?.let { mp3.id3v1Tag.title = it }
+                artist?.let { mp3.id3v1Tag.artist = it }
+                album?.let { mp3.id3v1Tag.album = it }
+                if (year?.isNotBlank() == true) mp3.id3v1Tag.year = year
+                if (trackNo != null && trackNo > 0) runCatching { mp3.id3v1Tag.track = trackNo.toString() }
             }
             mp3.save(dst.absolutePath)
             context.contentResolver.openOutputStream(uri, "wt").use { output ->
