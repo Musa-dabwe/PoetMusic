@@ -242,32 +242,111 @@ input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; wid
 .lyric { font-size:13px; font-weight:500; color:var(--lyric-dim); transition: all 0.3s; }
 .lyric.active { font-size:16px; font-weight:700; color:var(--ink); }
 
-/* listening journal */
-/* padding-top leaves room for the portrait that overhangs the card; the badge
-   is positioned from the wrapper's top edge so nothing overflows the screen */
-.journal-wrap { position:relative; padding-top:46px; }
-.journal-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:24px; padding:62px 24px 28px 24px; box-shadow:0 2px 14px var(--shadow-card); }
-.journal-title { text-align:center; font-size:26px; font-weight:700; letter-spacing:-0.03em; }
-.journal-kicker { text-align:center; font-size:12px; font-weight:600; letter-spacing:0.09em; text-transform:uppercase; color:var(--faint); margin-top:7px; }
-.journal-lede { font-size:15px; line-height:1.65; color:var(--muted); margin-top:20px; }
+/* listening journal — a full-screen report rather than a card on the canvas.
+   poet.js flags the shell with .journal-open while it is showing, which drops
+   the app header and the container padding so the card surface can run edge to
+   edge and the journal's own sticky bar can own the top of the screen. */
+body.journal-open .hdr { display:none; }
+body.journal-open #main-container { padding:0; }
+.journal-screen { min-height:100vh; background:var(--card-bg); }
+.journal-body { padding:0 18px calc(120px + env(safe-area-inset-bottom)) 18px; }
+.journal-bar { position:sticky; top:0; z-index:10; background:var(--card-bg); border-bottom:1px solid var(--divider); }
+.journal-bar-inner { display:flex; align-items:center; gap:12px; padding:13px 18px calc(13px + env(safe-area-inset-top)) 18px; }
+.journal-back { border:none; cursor:pointer; width:36px; height:36px; border-radius:11px; background:var(--overlay-neutral);
+  display:flex; align-items:center; justify-content:center; color:var(--ink); flex-shrink:0; }
+.journal-back:active { transform: scale(0.93); }
+.journal-bar-title { flex:1; min-width:0; font-size:16px; font-weight:700; letter-spacing:-0.02em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.journal-toggle { border:1.5px solid var(--accent); cursor:pointer; padding:8px 14px; border-radius:99px;
+  background:var(--accent-faint); color:var(--ink); font-size:12.5px; font-weight:700; flex-shrink:0; }
+.journal-toggle:active { transform: scale(0.96); }
+
+.journal-hero { display:flex; flex-direction:column; align-items:center; padding-top:30px; }
+.journal-title { font-size:27px; font-weight:700; letter-spacing:-0.03em; margin-top:16px; text-align:center; }
+.journal-kicker { font-size:12px; font-weight:600; letter-spacing:0.09em; text-transform:uppercase; color:var(--faint); margin-top:7px; text-align:center; }
+.journal-lede { font-size:15px; line-height:1.65; color:var(--muted); margin-top:22px; }
 .journal-strong { font-weight:700; color:var(--ink); }
-.journal-rule { height:1px; background:var(--divider); margin:24px 0; }
-.journal-section { display:flex; align-items:center; gap:10px; }
+.journal-empty { font-size:14.5px; line-height:1.6; color:var(--muted); margin-top:16px; }
+
+.journal-totals { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-top:24px; }
+.journal-tile { background:var(--inset-bg); border-radius:14px; padding:14px 10px; text-align:center; }
+.journal-tile-value { font-size:21px; font-weight:700; letter-spacing:-0.02em; }
+.journal-tile-label { font-size:11.5px; font-weight:600; color:var(--muted); margin-top:3px; }
+
+.journal-personality { margin-top:22px; border-radius:18px; padding:20px; background:var(--accent-faint); border:1.5px solid var(--accent); }
+.journal-personality-kicker { font-size:11.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
+.journal-personality-name { font-size:25px; font-weight:700; letter-spacing:-0.03em; margin-top:8px; }
+.journal-personality-desc { font-size:14px; line-height:1.6; color:var(--muted); margin-top:8px; }
+
+/* every section header doubles as the rule between blocks */
+.journal-section { display:flex; align-items:center; gap:10px; margin-top:24px; padding-top:24px; border-top:1px solid var(--divider); }
 .journal-section-bar { width:4px; height:17px; border-radius:2px; background:var(--accent); }
 .journal-section-name { font-size:17px; font-weight:700; letter-spacing:-0.02em; }
-.journal-list { display:flex; flex-direction:column; gap:14px; margin-top:16px; }
-.journal-bullet { display:flex; gap:12px; align-items:flex-start; font-size:14.5px; line-height:1.6; color:var(--muted); }
-.journal-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:7px; }
-.journal-metrics { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+
+.journal-artists { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:16px; }
+.journal-artist { display:flex; align-items:center; gap:11px; background:var(--inset-bg); border-radius:14px; padding:11px 12px; min-width:0; }
+.journal-artist-face { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:13px; font-weight:700; color:#3b3651; flex-shrink:0; }
+.journal-artist-name { font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.journal-artist-plays { font-size:11.5px; font-weight:600; color:var(--muted); margin-top:2px; }
+
+.journal-songs { display:flex; flex-direction:column; margin-top:12px; }
+.journal-song { display:flex; align-items:center; gap:14px; padding:11px 4px; border-bottom:1px solid var(--divider); }
+.journal-song-rank { width:30px; font-size:22px; font-weight:700; color:var(--faint); letter-spacing:-0.03em; flex-shrink:0; text-align:center; }
+.journal-song-title { font-size:14.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.journal-song-artist { font-size:12.5px; font-weight:600; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.journal-song-plays { font-size:12.5px; font-weight:700; color:var(--muted); flex-shrink:0; }
+
+/* the cover strip scrolls past the body padding, so it is pulled out to the
+   screen edge and the padding is re-applied inside as scroll room */
+.journal-albums { display:flex; gap:13px; margin:16px -18px 0 -18px; padding:0 18px 4px 18px; overflow-x:auto; scrollbar-width:none; }
+.journal-albums::-webkit-scrollbar { height:0; }
+.journal-album { width:132px; flex-shrink:0; }
+.journal-album-cover { position:relative; width:132px; height:132px; border-radius:15px; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; }
+.journal-album-cover img { width:100%; height:100%; object-fit:cover; }
+.journal-album-initials { font-size:26px; font-weight:700; color:rgba(59,54,81,0.55); }
+.journal-album-rank { position:absolute; left:10px; bottom:8px; font-size:11px; font-weight:700; color:rgba(59,54,81,0.55); }
+.journal-album-name { font-size:13px; font-weight:700; margin-top:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.journal-album-artist { font-size:11.5px; font-weight:600; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* the accent is a CSS variable, so the per-rank tint is an accent layer behind
+   the label instead of an alpha suffix on a hex the server cannot see */
+.journal-genres { display:flex; flex-wrap:wrap; gap:9px; margin-top:16px; }
+.journal-genre { position:relative; display:flex; align-items:center; gap:8px; border-radius:99px; padding:9px 15px; overflow:hidden; }
+.journal-genre::before { content:''; position:absolute; inset:0; background:var(--accent); opacity:var(--tint, 0.3); }
+.journal-genre-name { position:relative; font-size:13.5px; font-weight:700; }
+.journal-genre-pct { position:relative; font-size:12px; font-weight:600; color:var(--muted); }
+
+.journal-habits { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:16px; }
+.journal-habit { background:var(--inset-bg); border-radius:14px; padding:14px; }
+.journal-habit-label { font-size:10.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--faint); }
+.journal-habit-value { font-size:16px; font-weight:700; letter-spacing:-0.02em; margin-top:6px; }
+.journal-habit-note { font-size:12px; font-weight:500; color:var(--muted); margin-top:4px; line-height:1.5; }
+
+.journal-explored { background:var(--inset-bg); border-radius:15px; padding:16px; margin-top:16px; }
+.journal-explored-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; font-size:13.5px; font-weight:700; }
+.journal-explored-track { height:8px; border-radius:4px; background:var(--overlay-neutral); margin-top:10px; overflow:hidden; }
+.journal-explored-fill { height:100%; border-radius:4px; background:var(--accent); }
+.journal-explored-note { font-size:12px; font-weight:500; color:var(--muted); margin-top:9px; line-height:1.5; }
+
+.journal-metrics { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
 .journal-metric { display:flex; align-items:center; justify-content:space-between; gap:14px; background:var(--inset-bg); border-radius:13px; padding:13px 15px; }
 .journal-metric-name { font-size:14px; font-weight:700; }
 .journal-metric-value { font-size:13.5px; color:var(--muted); text-align:right; }
-.journal-portrait { position:absolute; top:0; left:50%; transform:translateX(-50%); width:92px; height:92px; cursor:pointer; }
-.journal-portrait:active { transform:translateX(-50%) scale(0.96); }
-.journal-portrait-ring { width:92px; height:92px; border-radius:50%; border:4px solid var(--card-bg); overflow:hidden; box-shadow:0 3px 12px var(--shadow-card); background:var(--accent-faint); display:flex; align-items:center; justify-content:center; }
+
+.journal-return { margin-top:26px; width:100%; border:1.5px solid var(--card-border-soft); cursor:pointer; padding:14px;
+  border-radius:14px; background:var(--card-bg); color:var(--ink); font-size:14.5px; font-weight:700; }
+.journal-return:active { transform: scale(0.98); }
+
+.journal-portrait { position:relative; width:96px; height:96px; cursor:pointer; }
+.journal-portrait:active { transform: scale(0.96); }
+.journal-portrait-ring { width:96px; height:96px; border-radius:50%; overflow:hidden; box-shadow:0 3px 14px var(--shadow-card);
+  background:var(--accent-faint); display:flex; align-items:center; justify-content:center; }
 .journal-portrait-ring img { width:100%; height:100%; object-fit:cover; }
 .journal-portrait-empty { text-align:center; font-size:10px; font-weight:600; line-height:1.3; color:var(--muted); }
-.journal-portrait-edit { position:absolute; right:-2px; bottom:2px; width:27px; height:27px; border-radius:50%; background:var(--accent); border:3px solid var(--card-bg); display:flex; align-items:center; justify-content:center; }
+.journal-portrait-edit { position:absolute; right:-2px; bottom:2px; width:28px; height:28px; border-radius:50%; background:var(--accent);
+  border:3px solid var(--card-bg); display:flex; align-items:center; justify-content:center; }
 
 /* settings */
 .folder-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; background:var(--accent-faint); }

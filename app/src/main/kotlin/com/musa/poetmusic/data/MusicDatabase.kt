@@ -422,23 +422,46 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             if (c.moveToFirst()) totalPlays = c.getInt(0)
         }
 
-        var topTrack: TopTrack? = null
+        // The leaderboards are read at the "Wrapped" depth (JOURNAL_TOP_N); the
+        // screen slices them shorter for its collapsed state.
+        val topSongs = mutableListOf<TopTrack>()
         db.rawQuery(
             """SELECT t.title, t.artist, COUNT(*) AS plays
                FROM plays p JOIN tracks t ON t.id = p.track_id
-               GROUP BY p.track_id ORDER BY plays DESC, t.title COLLATE NOCASE LIMIT 1""", null
-        ).use { c ->
-            if (c.moveToFirst()) topTrack = TopTrack(c.getString(0), c.getString(1), c.getInt(2))
-        }
+               GROUP BY p.track_id ORDER BY plays DESC, t.title COLLATE NOCASE LIMIT ?""",
+            arrayOf(JOURNAL_TOP_N.toString())
+        ).use { c -> while (c.moveToNext()) topSongs += TopTrack(c.getString(0), c.getString(1), c.getInt(2)) }
 
-        var topArtist: TopArtist? = null
+        val topArtists = mutableListOf<TopArtist>()
         db.rawQuery(
             """SELECT t.artist, COUNT(*) AS plays
                FROM plays p JOIN tracks t ON t.id = p.track_id
-               GROUP BY t.artist ORDER BY plays DESC, t.artist COLLATE NOCASE LIMIT 1""", null
+               GROUP BY t.artist ORDER BY plays DESC, t.artist COLLATE NOCASE LIMIT ?""",
+            arrayOf(JOURNAL_TOP_N.toString())
+        ).use { c -> while (c.moveToNext()) topArtists += TopArtist(c.getString(0), c.getInt(1)) }
+
+        // MAX(...has_art...) picks a track that actually carries a cover, so an
+        // album whose art sits on a later track still renders one; 0 when none do.
+        val topAlbums = mutableListOf<TopAlbum>()
+        db.rawQuery(
+            """SELECT t.album, t.artist, COUNT(*) AS plays,
+                      MAX(CASE WHEN t.has_art = 1 THEN t.id ELSE 0 END)
+               FROM plays p JOIN tracks t ON t.id = p.track_id
+               WHERE t.album <> '' AND t.album <> ?
+               GROUP BY t.album, t.artist ORDER BY plays DESC, t.album COLLATE NOCASE LIMIT ?""",
+            arrayOf(UNKNOWN_ALBUM, JOURNAL_TOP_N.toString())
         ).use { c ->
-            if (c.moveToFirst()) topArtist = TopArtist(c.getString(0), c.getInt(1))
+            while (c.moveToNext()) topAlbums += TopAlbum(c.getString(0), c.getString(1), c.getInt(2), c.getLong(3))
         }
+
+        val topGenres = mutableListOf<TopGenre>()
+        db.rawQuery(
+            """SELECT t.genre, COUNT(*) AS plays
+               FROM plays p JOIN tracks t ON t.id = p.track_id
+               WHERE t.genre <> ''
+               GROUP BY t.genre ORDER BY plays DESC, t.genre COLLATE NOCASE LIMIT ?""",
+            arrayOf(JOURNAL_TOP_N.toString())
+        ).use { c -> while (c.moveToNext()) topGenres += TopGenre(c.getString(0), c.getInt(1)) }
 
         // played_at is a wall-clock millisecond stamp; SQLite's date functions
         // take seconds, and 'localtime' buckets by the device's current zone.
@@ -451,6 +474,30 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             if (c.moveToFirst()) peakHour = PeakHour(c.getInt(0), c.getInt(1))
         }
 
+        var peakDay: PeakDay? = null
+        db.rawQuery(
+            """SELECT CAST(strftime('%w', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS day,
+                      COUNT(*) AS plays
+               FROM plays GROUP BY day ORDER BY plays DESC, day LIMIT 1""", null
+        ).use { c ->
+            if (c.moveToFirst()) peakDay = PeakDay(c.getInt(0), c.getInt(1))
+        }
+
+        // Only tracks still in the library count as explored — the progress bar
+        // compares against the current track count, and plays of since-removed
+        // files would push it past 100%.
+        var exploredTracks = 0
+        db.rawQuery(
+            "SELECT COUNT(DISTINCT p.track_id) FROM plays p JOIN tracks t ON t.id = p.track_id", null
+        ).use { c -> if (c.moveToFirst()) exploredTracks = c.getInt(0) }
+
+        var topDecade = ""
+        db.rawQuery(
+            """SELECT SUBSTR(year, 1, 3) AS dec, COUNT(*) AS n FROM tracks
+               WHERE year GLOB '[0-9][0-9][0-9][0-9]*'
+               GROUP BY dec ORDER BY n DESC, dec DESC LIMIT 1""", null
+        ).use { c -> if (c.moveToFirst()) topDecade = c.getString(0) + "0s" }
+
         return JournalStats(
             trackCount = trackCount,
             albumCount = albumCount,
@@ -460,10 +507,59 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             missingArt = missingArt,
             syncedLyrics = syncedLyrics,
             totalPlays = totalPlays,
-            topTrack = topTrack,
-            topArtist = topArtist,
-            peakHour = peakHour
+            topSongs = topSongs,
+            topArtists = topArtists,
+            topAlbums = topAlbums,
+            topGenres = topGenres,
+            peakHour = peakHour,
+            peakDay = peakDay,
+            exploredTracks = exploredTracks,
+            longestStreak = longestPlayStreak(),
+            formats = formatShares(),
+            topDecade = topDecade,
+            folderCount = folders().size
         )
+    }
+
+    /**
+     * The longest run of consecutive local days that each logged a play.
+     * julianday() over the local date gives one integer per calendar day, so
+     * consecutive days differ by exactly one however long the run is.
+     */
+    private fun longestPlayStreak(): Int {
+        var best = 0
+        var run = 0
+        var prev = Long.MIN_VALUE
+        readableDatabase.rawQuery(
+            """SELECT DISTINCT CAST(julianday(strftime('%Y-%m-%d', played_at / 1000, 'unixepoch', 'localtime')) AS INTEGER) AS d
+               FROM plays ORDER BY d""", null
+        ).use { c ->
+            while (c.moveToNext()) {
+                val day = c.getLong(0)
+                run = if (day == prev + 1) run + 1 else 1
+                if (run > best) best = run
+                prev = day
+            }
+        }
+        return best
+    }
+
+    /**
+     * Extension breakdown of the library, commonest first. Done in Kotlin
+     * because SQLite has no reverse-find, and a filename may hold several dots.
+     */
+    private fun formatShares(): List<FormatShare> {
+        val counts = mutableMapOf<String, Int>()
+        readableDatabase.rawQuery("SELECT display_name FROM tracks", null).use { c ->
+            while (c.moveToNext()) {
+                val name = c.getString(0) ?: ""
+                val ext = name.substringAfterLast('.', "").lowercase()
+                if (ext.isNotEmpty() && ext.length <= 5) counts[ext] = (counts[ext] ?: 0) + 1
+            }
+        }
+        return counts.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { FormatShare(it.key, it.value) }
     }
 
     // ---------- playlists ----------
@@ -546,5 +642,11 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
          * album, genre, year, track number and album artist.
          */
         const val CORE_TAG_FIELDS = 6
+
+        /**
+         * How deep each journal leaderboard is read. The screen shows the first
+         * five and reveals the rest when "Show Wrapped" is on.
+         */
+        const val JOURNAL_TOP_N = 10
     }
 }

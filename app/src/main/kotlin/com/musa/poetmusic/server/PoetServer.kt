@@ -158,7 +158,8 @@ object PoetServer {
                         JournalViews.journalScreen(
                             db.journalStats(),
                             JournalPortrait.exists(app),
-                            JournalPortrait.stamp(db)
+                            JournalPortrait.stamp(db),
+                            call.request.queryParameters["detail"] == "1"
                         ),
                         ContentType.Text.Html
                     )

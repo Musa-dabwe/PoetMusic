@@ -109,6 +109,9 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
     var onJournal = poetScreenUrl.indexOf('/screens/journal') === 0;
     lib.classList.toggle('active', !onSettings && !onJournal);
     set.classList.toggle('active', onSettings);
+    /* the journal is a full-screen page: it takes over the header's row and
+       the container padding for as long as it is the screen being shown */
+    document.body.classList.toggle('journal-open', onJournal);
     /* Sync the shown-track marker with what was actually rendered. Resetting
        it to -1 here made every poll re-fetch the whole Now Playing screen
        once a second — a permanent full-screen flicker. */
@@ -702,7 +705,8 @@ function poetPickPortrait() {
    re-rendered screen carries a fresh ?v= stamp, so the new portrait shows
    instead of the cached one */
 function poetPortraitPicked() {
-  if (poetScreenUrl === '/screens/journal') poetGo('/screens/journal');
+  /* prefix match: the journal URL also carries the ?detail= depth toggle */
+  if (poetScreenUrl.indexOf('/screens/journal') === 0) poetGo(poetScreenUrl);
 }
 
 /* back-button support: Android calls poetBack() */
