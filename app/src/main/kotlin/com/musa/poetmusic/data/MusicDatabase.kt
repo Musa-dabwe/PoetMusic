@@ -422,8 +422,8 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
             if (c.moveToFirst()) totalPlays = c.getInt(0)
         }
 
-        // The leaderboards are read at the "Wrapped" depth (JOURNAL_TOP_N); the
-        // screen slices them shorter for its collapsed state.
+        // JOURNAL_TOP_N caps every leaderboard; the journal screen renders
+        // whatever these reads return.
         val topSongs = mutableListOf<TopTrack>()
         db.rawQuery(
             """SELECT t.title, t.artist, COUNT(*) AS plays
@@ -643,10 +643,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
          */
         const val CORE_TAG_FIELDS = 6
 
-        /**
-         * How deep each journal leaderboard is read. The screen shows the first
-         * five and reveals the rest when "Show Wrapped" is on.
-         */
+        /** How deep each journal leaderboard is read, and shown. */
         const val JOURNAL_TOP_N = 10
     }
 }

@@ -16,8 +16,8 @@ import org.junit.Test
 /**
  * The Listening Journal reports numbers the user will compare against their
  * own library, so the derivations (hours, percentages, the empty states) are
- * pinned down here, along with the depth toggle and the escaping of track,
- * artist and album names.
+ * pinned down here, along with the leaderboard links and the escaping of
+ * track, artist and album names.
  */
 class JournalTest {
 
@@ -52,8 +52,8 @@ class JournalTest {
         peakHour, peakDay, exploredTracks, longestStreak, formats, topDecade, folderCount
     )
 
-    private fun screen(s: JournalStats = stats(), detail: Boolean = false) =
-        JournalViews.journalScreen(s, false, "0", detail)
+    private fun screen(s: JournalStats = stats()) =
+        JournalViews.journalScreen(s, false, "0")
 
     // ---------- formatting ----------
 
@@ -160,21 +160,39 @@ class JournalTest {
     }
 
     @Test
-    fun `show wrapped deepens the leaderboards and swaps the toggle`() {
-        val short = screen()
-        assertTrue(short.contains("Show Wrapped"))
-        assertTrue(short.contains("""hx-get="/screens/journal?detail=1""""))
-        assertTrue(short.contains("Song 5"))
-        assertFalse("collapsed stops at five", short.contains("Song 6"))
-        assertFalse(short.contains("Genre 7"))
+    fun `the leaderboards render at full depth with no wrapped toggle`() {
+        val html = screen()
+        // Nothing re-requests the screen at a second depth any more.
+        assertFalse(html.contains("Show Wrapped"))
+        assertFalse(html.contains("Show less"))
+        assertFalse(html.contains("detail=1"))
+        assertFalse(html.contains("journal-toggle"))
+        // Everything the database read returned is on the page.
+        assertTrue(html.contains("Song 10"))
+        assertTrue(html.contains("Artist 10"))
+        assertTrue(html.contains("Album 10"))
+        assertTrue(html.contains("Genre 8"))
+    }
 
-        val deep = screen(detail = true)
-        assertTrue(deep.contains("Show less"))
-        assertTrue(deep.contains("""hx-get="/screens/journal""""))
-        assertFalse("expanded must not re-request the deep view", deep.contains("detail=1"))
-        assertTrue(deep.contains("Song 10"))
-        assertTrue(deep.contains("Artist 10"))
-        assertTrue(deep.contains("Genre 8"))
+    @Test
+    fun `the personality card is gone`() {
+        val html = screen(stats(exploredTracks = 20))
+        assertFalse(html.contains("Your listener personality"))
+        assertFalse(html.contains("journal-personality"))
+        assertFalse(html.contains("The Devoted Fan"))
+    }
+
+    @Test
+    fun `a top artist opens the artist screen the Artists tab opens`() {
+        val html = screen(stats(topArtists = listOf(TopArtist("Wondaboy Jr", 12))))
+        assertTrue(html.contains("""hx-get="/screens/artist?name=Wondaboy+Jr""""))
+        assertTrue(html.contains("""hx-target="#main-container""""))
+    }
+
+    @Test
+    fun `a top album opens the album screen the Albums tab opens`() {
+        val html = screen(stats(topAlbums = listOf(TopAlbum("Neon Cathedral", "Wondaboy", 12, 7))))
+        assertTrue(html.contains("""hx-get="/screens/album?album=Neon+Cathedral&artist=Wondaboy""""))
     }
 
     @Test
@@ -234,29 +252,6 @@ class JournalTest {
         val html = screen(stats(missingArt = 0))
         assertTrue(html.contains("every track covered"))
         assertFalse(html.contains("0 tracks missing"))
-    }
-
-    // ---------- personality ----------
-
-    @Test
-    fun `personality follows the repeat share then the clock`() {
-        // 100 plays over 20 distinct tracks: 80% repeats.
-        assertEquals("The Devoted Fan", JournalViews.personalityFor(stats(exploredTracks = 20)).first)
-        // 100 plays over 60 distinct tracks: 40% repeats.
-        assertEquals("The Deep Diver", JournalViews.personalityFor(stats(exploredTracks = 60)).first)
-        // Mostly first listens, but all of them late: the clock decides.
-        assertEquals("The Night Owl", JournalViews.personalityFor(stats(exploredTracks = 90, peakHour = PeakHour(23, 40))).first)
-        assertEquals("The Explorer", JournalViews.personalityFor(stats(exploredTracks = 90, peakHour = PeakHour(14, 40))).first)
-        // Nothing logged at all.
-        assertEquals("The Newcomer", JournalViews.personalityFor(stats(totalPlays = 0)).first)
-    }
-
-    @Test
-    fun `the personality card is rendered with its description`() {
-        val html = screen(stats(exploredTracks = 20))
-        assertTrue(html.contains("Your listener personality"))
-        assertTrue(html.contains("The Devoted Fan"))
-        assertTrue(html.contains("80%"))
     }
 
     // ---------- empty states ----------
