@@ -104,7 +104,23 @@ button { font-family: inherit; color: var(--ink); }
 .rail-item { display:flex; align-items:center; gap:12px; width:100%; text-align:left;
   border:none; background:transparent; color:var(--ink); font-family:inherit;
   font-size:13.5px; font-weight:600; cursor:pointer; padding:10px; border-radius:11px; }
-.rail-item .ri-ico { flex:0 0 20px; height:20px; display:flex; align-items:center; justify-content:center; opacity:0.8; font-size:15px; }
+/* Rail icons are single-colour silhouettes painted through a CSS mask rather
+   than drawn as <img>: the box is filled with currentColor and the artwork only
+   decides which pixels survive, so one asset serves both themes and the active
+   accent without a second file. Every icon-*.svg is framed to the same square
+   so their optical weight matches at 20px. */
+.rail-item .ri-ico { flex:0 0 20px; height:20px; opacity:0.8; background:currentColor;
+  -webkit-mask-position:center; mask-position:center; -webkit-mask-size:contain; mask-size:contain;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
+.ri-songs { -webkit-mask-image:url(/assets/icon-songs.svg); mask-image:url(/assets/icon-songs.svg); }
+.ri-albums { -webkit-mask-image:url(/assets/icon-albums.svg); mask-image:url(/assets/icon-albums.svg); }
+.ri-artists { -webkit-mask-image:url(/assets/icon-artists.svg); mask-image:url(/assets/icon-artists.svg); }
+.ri-genres { -webkit-mask-image:url(/assets/icon-genres.svg); mask-image:url(/assets/icon-genres.svg); }
+.ri-playlists { -webkit-mask-image:url(/assets/icon-playlists.svg); mask-image:url(/assets/icon-playlists.svg); }
+.ri-favorites { -webkit-mask-image:url(/assets/icon-favorites.svg); mask-image:url(/assets/icon-favorites.svg); }
+.ri-journal { -webkit-mask-image:url(/assets/icon-journal.svg); mask-image:url(/assets/icon-journal.svg); }
+.ri-about { -webkit-mask-image:url(/assets/icon-about.svg); mask-image:url(/assets/icon-about.svg); }
+.ri-settings { -webkit-mask-image:url(/assets/icon-settings.svg); mask-image:url(/assets/icon-settings.svg); }
 .rail-item .ri-txt { display:none; white-space:nowrap; overflow:hidden; }
 .rail-item.on { background:var(--accent-faint); }
 .rail-item.on .ri-ico { opacity:1; }

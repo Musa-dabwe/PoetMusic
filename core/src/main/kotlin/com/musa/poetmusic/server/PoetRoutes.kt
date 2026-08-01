@@ -82,6 +82,7 @@ fun Application.poetRoutes(deps: PoetDeps) {
                 name.endsWith(".js") -> ContentType.parse("application/javascript")
                 name.endsWith(".woff2") -> ContentType.parse("font/woff2")
                 name.endsWith(".css") -> ContentType.Text.CSS
+                name.endsWith(".svg") -> ContentType.Image.SVG
                 else -> ContentType.Application.OctetStream
             }
             val bytes = host.asset(name) ?: return@get call.respond(HttpStatusCode.NotFound)
