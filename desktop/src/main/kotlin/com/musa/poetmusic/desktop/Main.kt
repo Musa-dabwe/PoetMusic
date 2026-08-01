@@ -71,13 +71,54 @@ fun main(args: Array<String>) {
     println("Poet Music (desktop) $APP_VERSION")
     println("Serving on $url  —  library: ${DesktopLibrary.defaultDbFile()}")
 
+    // Everything that has to be flushed before the process ends, in order.
+    // Two things race to run it — the window's destroy handler and the JVM
+    // shutdown hook — so the first caller wins and the second is a no-op;
+    // tearing GStreamer down twice from two threads is not survivable.
+    val shuttingDown = java.util.concurrent.atomic.AtomicBoolean(false)
+    val mpris = MprisRef()
     val shutdown = {
-        player.shutdown()
-        runCatching { server.stop(500, 1500) }
+        if (shuttingDown.compareAndSet(false, true)) {
+            mpris.get()?.shutdown()
+            player.shutdown()
+            runCatching { server.stop(500, 1500) }
+        }
         Unit
     }
-    // Covers a kill from outside the window (Ctrl-C, a session logout).
+    // Covers a kill from outside the window: Ctrl-C, a session logout, or the
+    // SIGTERM the package's prerm sends before uninstalling. Registered before
+    // anything else can ask to quit, so no exit path can miss it.
     Runtime.getRuntime().addShutdownHook(Thread(shutdown))
+
+    /**
+     * Flush and go. Deliberately [Runtime.halt] rather than a return from main:
+     * once our own state is safe there is nothing to gain from the JVM's exit
+     * sequence, and plenty to lose — it hands the process to GStreamer's and
+     * WebKitGTK's native teardown, which abort. A SIGABRT is a core dump and,
+     * on a desktop that collects them, a crash report for a clean quit.
+     */
+    val exitApp = {
+        shutdown()
+        Runtime.getRuntime().halt(0)
+    }
+
+    // Desktop media controls. Started before the window so a panel applet has
+    // the restored track from the first frame; a machine with no session bus
+    // simply does without, exactly as one with no GTK falls back to a browser.
+    // Quit ends the process directly rather than closing the window, because
+    // GTK ignores a close request for a window it has not realized yet — which
+    // is most of the first second the app is alive.
+    val media = MprisService(
+        player = player,
+        store = store,
+        artFor = { track -> host.embeddedArt(track) ?: host.asset("placeholder.jpg") },
+        onRaise = { WebKitWindow.present() },
+        onQuit = exitApp
+    )
+    if (media.start()) {
+        mpris.set(media)
+        host.onLibraryChangedHook = media::publish
+    }
 
     if (!WebKitWindow.run(url, "Poet Music", onClosed = shutdown)) {
         // No GTK or no WebKitGTK: fall back to the default browser rather than
@@ -86,6 +127,18 @@ fun main(args: Array<String>) {
         openBrowser(url)
         Thread.currentThread().join()
     }
+    exitApp()
+}
+
+/**
+ * Holds the MPRIS service for the shutdown lambda, which has to exist before it
+ * does: the lambda is what the service's own Quit calls, and the shutdown hook
+ * must be registered before anything can ask to quit at all.
+ */
+private class MprisRef {
+    @Volatile private var service: MprisService? = null
+    fun get(): MprisService? = service
+    fun set(value: MprisService) { service = value }
 }
 
 /**
@@ -139,6 +192,7 @@ private fun desktopAbout(port: Int) = AboutSpec(
         "UI" to "htmx single-page app in a WebKitGTK view, in a GTK 3 window",
         "Server" to "embedded Ktor (CIO) bound to `$LOOPBACK:$port`",
         "Playback" to "GStreamer `playbin`, with `equalizer-10bands` and `pitch`",
+        "Media keys" to "MPRIS on the session bus — the panel applet and the keyboard media keys",
         "Tags" to "JAudiotagger — MP3, FLAC, OGG and M4A are all editable",
         "Storage" to "SQLite via JDBC, at `\$XDG_DATA_HOME/poet-music/library.db`",
         "Packaging" to "a `.deb` built with `jpackage`, carrying its own Java runtime"

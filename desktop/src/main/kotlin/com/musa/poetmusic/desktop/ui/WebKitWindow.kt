@@ -41,6 +41,7 @@ object WebKitWindow {
         fun gtk_window_set_title(window: Pointer, title: String)
         fun gtk_window_set_default_size(window: Pointer, width: Int, height: Int)
         fun gtk_window_maximize(window: Pointer)
+        fun gtk_window_present(window: Pointer)
         fun gtk_container_add(container: Pointer, widget: Pointer)
         fun gtk_widget_show_all(widget: Pointer)
         fun gtk_widget_grab_focus(widget: Pointer)
@@ -159,6 +160,15 @@ object WebKitWindow {
         gtk.gtk_main()
         windowHandle = null
         return true
+    }
+
+    /**
+     * Bring the window to the front — MPRIS `Raise`, which is what clicking the
+     * name in a desktop media applet calls.
+     */
+    fun present() {
+        val window = windowHandle ?: return
+        postToMainLoop { libs?.gtk?.gtk_window_present(window) }
     }
 
     /**

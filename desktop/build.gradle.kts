@@ -42,6 +42,11 @@ dependencies {
     implementation(libs.jna)
     implementation(libs.gst1.java.core)
     implementation(libs.jaudiotagger)
+    // MPRIS. The transport artifact carries no code we call — it registers the
+    // unix-socket transport through the ServiceLoader — so it is a runtime
+    // dependency, but jpackage stages the whole runtime classpath either way.
+    implementation(libs.dbus.java.core)
+    runtimeOnly(libs.dbus.java.transport)
     testImplementation(libs.junit)
 }
 
