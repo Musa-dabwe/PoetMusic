@@ -123,3 +123,5 @@ Licensed under the [Apache License 2.0](LICENSE).
 - Placeholder cover art: [Designed by rawpixel.com / Freepik](http://www.freepik.com).
   The original image was modified (cropped/resized) for in-app use, as permitted
   by the Freepik free license.
+
+---
