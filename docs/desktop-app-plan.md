@@ -277,10 +277,55 @@ layer needs the rest.
 
 ---
 
+## 5c. ✅ MPRIS, and what the package says about itself
+
+Landed after the fact; kept here rather than in §6 because it closes that
+section's first item.
+
+**MPRIS over D-Bus** (`desktop/.../Mpris.kt`). `org.mpris.MediaPlayer2` and
+`.Player` on one object at `/org/mpris/MediaPlayer2`, with every readable value
+behind `org.freedesktop.DBus.Properties` — which is the whole protocol, and the
+only thing GNOME's panel, KDE's applet, the lock screens and the `XF86Audio`
+keys all agree on.
+
+| Decision | Why |
+| --- | --- |
+| `dbus-java` over hand-rolled GDBus through JNA | The transport is the JDK's own Unix-domain socket support, so the `.deb` gains no native dependency. Marshalling `a{sv}` metadata dictionaries by hand over GVariant is several hundred lines of JNA that would then have to be maintained. |
+| Poll the player's snapshot on the existing 500 ms cadence | `GstPlayer` already refreshes on that tick and `snapshot` is safe to read from any thread, so MPRIS needs no listener plumbing inside the player. `PropertiesChanged` carries only the properties that actually moved. |
+| `Position` never signalled | The spec asks for it — a playing track would otherwise be a signal every tick. Clients poll it. |
+| Cover art staged in `$XDG_CACHE_HOME` | MPRIS hands a shell a URL, not bytes. Keyed by the file's mtime so a tag edit produces a new URL rather than a stale image, and pruned to the last few. |
+| Quit halts the process | Two bugs, both found live. GTK silently drops a close request for a window it has not realized yet, so a `Quit` in the first second did nothing; and returning from `main` hands the process to GStreamer's and WebKitGTK's native teardown, which aborts — `EXIT=134`, a core dump and a desktop crash report for a clean quit. Both exit paths now flush our own state and `Runtime.halt(0)`. |
+
+`GstPlayer` gained direct setters (repeat, shuffle, speed, volume, play, pause,
+stop, relative seek) beside its existing advance/cycle ones, because a D-Bus
+client writes the value it wants rather than cycling to the next one.
+
+**Uninstalling now stops playback.** `dpkg` unlinks the files, the running
+process keeps its own inodes open, and the music carries on with no window left
+to stop it from. `packaging/jpackage/prerm` signals every process running out of
+the install directory and waits for it, so the JVM shutdown hook saves the queue
+first. It reads `/proc/PID/exe` rather than calling `pgrep`: `procps` is not
+Essential and a maintainer script may not assume a package it has not declared.
+
+**And the package now says who made it.** It claimed
+`Poet Music <poet-music@noreply.invalid>`, so a software centre with nothing
+better captioned it "poet-music Developers". `--vendor`, `--about-url` and a
+custom `control` template fix the Debian side; the author name a software centre
+actually reads lives in AppStream, so `packaging/metainfo/` ships a
+`metainfo.xml` that `postinst` copies to `/usr/share/metainfo` and `postrm`
+removes. `jpackage` on JDK 17 cannot place a file outside the app directory,
+which is why it travels inside the package and is copied rather than installed.
+
+Every one of these overrides jpackage's own template through `--resource-dir`.
+Custom resources are token-substituted exactly as the stock ones are —
+`APPLICATION_PACKAGE`, `UTILITY_SCRIPTS`, `DESKTOP_COMMANDS_UNINSTALL` — which
+is verified by unpacking the built `.deb`, and is worth knowing because the
+substitution also rewrites those words inside comments.
+
+---
+
 ## 6. 🟢 Follow-ups, deliberately out of scope here
 
-- **MPRIS over D-Bus** — desktop media keys and the GNOME/KDE applets. §5.2
-  names it; it needs no view-layer change and can land on its own.
 - **`WatchService` folder watching** — the desktop counterpart of
   `LibraryWatcher`. Manual and interval rescans cover the gap.
 - **Now Playing as a permanent right-hand pane** — `native-ui-solidification.md`
