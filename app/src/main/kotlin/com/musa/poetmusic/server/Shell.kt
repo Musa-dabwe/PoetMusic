@@ -40,6 +40,8 @@ object Shell {
    (and outranks :root by specificity), so all components restyle themselves
    when the theme flips. */
 :root {
+  /* the dark counterpart lives in poet.css's html[data-theme="dark"] block */
+  color-scheme: light;
   --accent: $accent;
   --accent-faint: ${accent}2e;
   --accent-soft: ${accent}66;
@@ -102,12 +104,14 @@ object Shell {
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:6px;">
+        <!-- currentColor, not a fixed ink: these sit on the tray surface, which
+             is dark in dark mode. .tray-btn inherits --ink, so they follow. -->
         <button class="tray-btn" hx-post="/api/player/prev" hx-swap="none">
-          <svg width="14" height="11" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>
+          <svg width="14" height="11" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="currentColor"></rect><polygon points="18,0 6,7 18,14" fill="currentColor"></polygon></svg>
         </button>
         <button class="tray-play" id="tray-play" hx-post="/api/player/toggle" hx-swap="none"></button>
         <button class="tray-btn" hx-post="/api/player/next" hx-swap="none">
-          <svg width="14" height="11" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>
+          <svg width="14" height="11" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="currentColor"></polygon><rect x="15" y="0" width="3" height="14" fill="currentColor"></rect></svg>
         </button>
       </div>
     </div>

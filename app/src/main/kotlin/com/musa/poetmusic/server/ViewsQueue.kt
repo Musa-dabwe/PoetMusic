@@ -21,7 +21,7 @@ object QueueViews {
         <div class="queue-panel">
           <div class="qp-hdr">
             <button class="qp-back" onclick="closeQueue()" aria-label="Close queue">
-              <svg width="14" height="8" viewBox="0 0 14 8"><path d="M1 1 L7 7 L13 1" stroke="#3b3651" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <svg width="14" height="8" viewBox="0 0 14 8"><path d="M1 1 L7 7 L13 1" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
             </button>
             <div style="flex:1; min-width:0;">
               <div class="qp-title">Queue</div>

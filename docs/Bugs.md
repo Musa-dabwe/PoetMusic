@@ -197,6 +197,52 @@ Legend: 🟣 fixed · 🔁 was fixed, got reintroduced, fixed again
   Open the short single-song drawer (no overflow) and drag inside it: page
   stays put. Close the drawer: the library scrolls normally again.
 
+## PR #12 — Dark mode contrast fixes (`claude/improvement-tasks`)
+
+Full task list and rationale: `docs/dark-mode-fix.md`.
+
+### 12.1 🟣 Settings pills rendered white-on-white in dark mode
+- **Symptom:** in dark mode the "Rescan when older than", Equalizer "Preset",
+  "Playback" and "Canvas tint" pill groups were white lozenges with near-white
+  labels (~1.05:1). The selected pill was equally invisible.
+- **Root cause:** `.tint-pill` declared no `background`, and the global button
+  reset (`poet.css`) sets only `font-family` and `color`. The WebView therefore
+  fell back to the UA default `ButtonFace` — an opaque near-white — while
+  `--ink` flips to `#f0f0f5` under `html[data-theme="dark"]`. Nothing declared
+  `color-scheme`, so the UA default never followed the theme. The class was
+  also reused for three controls that are not canvas tints and so never got the
+  inline `style="background:…"` that made it work in the one place it belongs.
+- **Fix:** EQ presets, playback thresholds and scan intervals now use the
+  existing theme-aware `.chip` (`poet.css`, already used by Now Playing).
+  `.tint-pill` keeps its one real job and pins label, border and fallback
+  background to light-theme values, because its background is always a light
+  tint in both themes. `color-scheme: light` / `dark` added to `:root` and
+  `html[data-theme="dark"]`.
+- **Do not reintroduce by:** adding a `<button>` class without an explicit
+  `background`, or reusing `.tint-pill` for anything that is not a canvas tint.
+  For a selectable pill, reach for `.chip`.
+- **How to verify:** Settings → Appearance → Dark → every pill group legible
+  with a visible selected option; switch back to Light and confirm the tint
+  pills still show their tint as the pill background.
+
+### 12.2 🟣 Icon glyphs hardcoded to the light ink were invisible on dark surfaces
+- **Symptom:** the bottom tray's prev/next arrows, Now Playing's prev/next
+  buttons, the queue panel's back chevron and every drawer action icon were
+  dark navy on a near-black surface in dark mode (the drawer icons measured
+  ~1.9:1, below the 3:1 floor for non-text).
+- **Root cause:** the SVGs hardcoded `fill`/`stroke="#3b3651"` while their
+  surfaces (`#tray`, `.np-side`, `.qp-back`, `.dicon`) are all theme tokens
+  that go dark.
+- **Fix:** those glyphs now use `currentColor` and inherit `--ink` from the
+  button reset — the pattern `.hdr-logo` already used.
+- **Do not reintroduce by:** hardcoding `#3b3651` in a new icon. It is only
+  correct on a surface that is light in *both* themes — `var(--accent)` or
+  `var(--panel-strong)`. `ICON_PLAY_*`/`ICON_PAUSE_*`, the `.cab-*` icons, the
+  row/playlist check glyphs and `ICON_QP_*` are correct for that reason and
+  were deliberately left alone.
+- **How to verify:** in dark mode, check the tray arrows, the Now Playing
+  prev/next, the queue back chevron and the ⋯ drawer icons all read clearly.
+
 ---
 
 ## Design-file delta: `Poet_Music.initial.html` → `Poet_Music.dc_new.html`
@@ -226,3 +272,7 @@ real app):
 - [ ] Lyrics open: page never scrolls by itself; only the deck glides (10.1)
 - [ ] Drawer/sheet/queue open: background list never moves, even when
       flinging past the overlay's end or dragging the backdrop (11.1)
+- [ ] Dark mode: every Settings pill group legible with a visible selection,
+      and the tint pills still show their tint in light mode (12.1)
+- [ ] Dark mode: tray / Now Playing / queue / drawer icons all read against
+      their surfaces (12.2)
