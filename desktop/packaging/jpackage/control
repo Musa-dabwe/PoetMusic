@@ -1,0 +1,34 @@
+Package: APPLICATION_PACKAGE
+Version: APPLICATION_VERSION-APPLICATION_RELEASE
+Section: APPLICATION_SECTION
+Maintainer: APPLICATION_MAINTAINER
+Priority: optional
+Architecture: APPLICATION_ARCH
+Provides: APPLICATION_PACKAGE
+Description: APPLICATION_DESCRIPTION
+ Poet Music plays the music that is already on your disk. There is no account,
+ no catalogue and no sign-in: you point it at a folder, it reads the tags,
+ cover art and .lrc lyric files it finds there, and that is your library.
+ .
+ Browsing is by song, album, artist, genre or playlist, with live search and a
+ sort order that is remembered between sessions. Now Playing carries a seek
+ bar, synced lyrics, a ten-band equaliser, playback-speed steps and a sleep
+ timer that can end on a clock or after a set number of songs.
+ .
+ The queue is a Musicolet-style working copy rather than an engine setting:
+ shuffling writes a new fixed order around the song currently playing,
+ un-shuffling puts the original order back, and "play next" inserts directly
+ after the current track. The queue, position and modes survive a restart.
+ .
+ A built-in tag editor writes to MP3, FLAC, OGG and M4A — titles through to
+ composer and comment, embedded artwork, unsynced lyrics, and a synced-LRC
+ maker that stamps timestamps against live playback. The Listening Journal
+ reports on your own archive: totals, top artists and albums, listening
+ habits and library health, all counted locally.
+ .
+ Playback is the system's GStreamer, so it uses the codecs already installed,
+ and the interface is a WebKitGTK view in a GTK window over a server bound to
+ the loopback address only. Nothing is sent anywhere.
+Depends: PACKAGE_DEFAULT_DEPENDENCIES PACKAGE_CUSTOM_DEPENDENCIES
+Installed-Size: APPLICATION_INSTALLED_SIZE
+APPLICATION_HOMEPAGE

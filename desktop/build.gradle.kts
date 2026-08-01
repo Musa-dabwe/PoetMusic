@@ -48,10 +48,18 @@ dependencies {
 val mainClassName = "com.musa.poetmusic.desktop.MainKt"
 val appVersion = libs.versions.appVersionName.get()
 
-// lintian rejects @localhost as a bogus mail host. Override for a real
+// Who the package says made it. A software centre captions an app with its
+// AppStream developer name, falling back to "<package> Developers" when there
+// is none — which is why both this and packaging/metainfo/ name the author.
+val appAuthor = "Musa-dabwe"
+val appHomepage = "https://github.com/Musa-dabwe/PoetMusic"
+
+// Debian wants a real mail host, so @localhost and .invalid are both out. The
+// GitHub no-reply address is a working, deliberately public one, which beats
+// putting a personal inbox in every copy of the package. Override for a real
 // release with: ./gradlew :desktop:packageDeb -Ppoet.deb.maintainer=you@example.com
 val debMaintainer: String = (findProperty("poet.deb.maintainer") as String?)
-    ?: "poet-music@noreply.invalid"
+    ?: "musa-dabwe@users.noreply.github.com"
 
 tasks.jar {
     manifest {
@@ -81,6 +89,9 @@ val collectRuntime by tasks.registering(Sync::class) {
     description = "Stage the app jar and its runtime dependencies for jpackage."
     from(tasks.jar)
     from(configurations.runtimeClasspath)
+    // Rides along so the package carries it; the postinst script copies it into
+    // /usr/share/metainfo, which jpackage on JDK 17 cannot write to directly.
+    from(file("packaging/metainfo"))
     into(jpackageInput)
 }
 
@@ -102,14 +113,27 @@ tasks.register<Exec>("packageDeb") {
         "--type", "deb",
         "--name", "poet-music",
         "--app-version", appVersion,
+        // The one-line synopsis. The paragraphs beneath it in a `dpkg -s` or a
+        // software centre come from packaging/jpackage/control, which jpackage
+        // has no flag for.
         "--description", "Offline-first, pastel-themed music player",
-        "--vendor", "Poet Music",
-        "--copyright", "Poet Music",
+        "--vendor", appAuthor,
+        "--copyright", "Copyright 2026 $appAuthor — Apache-2.0",
+        "--about-url", appHomepage,
         "--input", jpackageInput.get().asFile.absolutePath,
         "--main-jar", tasks.jar.get().archiveFileName.get(),
         "--main-class", mainClassName,
         "--dest", outDir.get().asFile.absolutePath,
         "--icon", file("packaging/poet.png").absolutePath,
+        // Overrides for jpackage's own packaging templates:
+        //   control   the long description and the Homepage field
+        //   prerm     stop a running Poet, or dpkg deletes the files out from
+        //             under a process that keeps playing regardless
+        //   postinst  put the AppStream metadata where software centres look
+        //   postrm    take it back out again
+        // Every token the stock templates use still works in ours — jpackage
+        // substitutes custom resources exactly as it does its own.
+        "--resource-dir", file("packaging/jpackage").absolutePath,
         "--linux-shortcut",
         "--linux-menu-group", "AudioVideo;Audio;Player;",
         "--linux-deb-maintainer", debMaintainer,
