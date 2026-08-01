@@ -16,7 +16,7 @@ import java.util.Locale
  * PlayerController writes once a song has actually been listened to.
  *
  * The leaderboards render at whatever depth the database read returned
- * (MusicDatabase.JOURNAL_TOP_N), so the screen has a single depth.
+ * (JOURNAL_TOP_N), so the screen has a single depth.
  */
 object JournalViews {
 

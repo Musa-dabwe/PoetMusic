@@ -1,6 +1,6 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.data.MusicDatabase
+import com.musa.poetmusic.data.LibraryStore
 
 /**
  * One row of a sort drawer: the URL [slug] the drawer fires, the database
@@ -75,13 +75,13 @@ object LibrarySort {
      * key so an upgrade keeps the order the user last chose; anything the tab
      * no longer offers degrades to its default rather than to an empty list.
      */
-    fun read(db: MusicDatabase, tab: String): String {
+    fun read(db: LibraryStore, tab: String): String {
         val fallback = if (tab == "songs") db.getSetting("lib_sort", defaultFor(tab)) else defaultFor(tab)
         val stored = db.getSetting(settingKey(tab), fallback)
         return if (optionsFor(tab).any { it.key == stored }) stored else defaultFor(tab)
     }
 
-    fun write(db: MusicDatabase, tab: String, key: String) {
+    fun write(db: LibraryStore, tab: String, key: String) {
         db.setSetting(settingKey(tab), key)
         // Kept in step so a downgrade (or any leftover reader) still sees it.
         if (tab == "songs") db.setSetting("lib_sort", key)

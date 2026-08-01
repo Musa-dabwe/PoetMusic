@@ -1,6 +1,6 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.data.MusicDatabase
+import com.musa.poetmusic.data.LibraryStore
 import com.musa.poetmusic.data.Track
 
 /**
@@ -16,7 +16,7 @@ data class QueueCtx(
     val pid: Long = 0,
     val genre: String = ""
 ) {
-    fun resolve(db: MusicDatabase): List<Track> = when (ctx) {
+    fun resolve(db: LibraryStore): List<Track> = when (ctx) {
         "album" -> db.tracksForAlbum(album, artist)
         "artist" -> db.tracksForArtist(artist)
         "genre" -> db.tracksForGenre(genre)
@@ -31,12 +31,12 @@ data class QueueCtx(
      * artist, genre or playlist, so it is sliced after the read — the point of
      * both paths is the same, keeping the rendered row count bounded.
      */
-    fun resolvePage(db: MusicDatabase, offset: Int, limit: Int): List<Track> =
+    fun resolvePage(db: LibraryStore, offset: Int, limit: Int): List<Track> =
         if (ctx == "songs") db.tracks(q, sort, limit, offset)
         else resolve(db).drop(offset).take(limit)
 
     /** Total rows behind [resolvePage], for the "showing x of y" footer. */
-    fun total(db: MusicDatabase): Int =
+    fun total(db: LibraryStore): Int =
         if (ctx == "songs") db.trackCount(q) else resolve(db).size
 
     fun query(): String = buildString {
@@ -58,10 +58,13 @@ object SharedViews {
         """<svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5 L4.5 8.5 L11 1" stroke="#3b3651" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>"""
 
     /**
-     * A library song tile. Tap plays the track; long-press / right-click enters
-     * multi-select (checkbox + Contextual Action Bar); the ⋯ button opens the
-     * full options drawer. Tap-to-play and select-toggle are handled by the
-     * delegated row click handler in Shell using the data-* URLs below.
+     * A library song tile. Tap plays the track; a 300 ms press enters
+     * multi-select (checkbox + Contextual Action Bar); the options drawer is a
+     * right-click where there is a mouse, and the ⋯ button where there is not.
+     * Both affordances are always in the markup — `poet.css` hides ⋯ on
+     * `(pointer: fine)`, so which one shows is a CSS decision like every other
+     * mode difference. Tap-to-play, select-toggle and the drawer are handled by
+     * the delegated handlers in poet.js using the data-* URLs below.
      */
     fun songRow(t: Track, ctx: QueueCtx): String {
         val cq = ctx.query()

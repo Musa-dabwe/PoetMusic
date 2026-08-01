@@ -23,6 +23,7 @@ import com.musa.poetmusic.R
 import com.musa.poetmusic.data.MusicDatabase
 import com.musa.poetmusic.playback.PlaybackService
 import com.musa.poetmusic.playback.PlayerController
+import com.musa.poetmusic.playback.PlayerSnapshot
 import com.musa.poetmusic.server.Shell
 import java.util.concurrent.Executors
 
@@ -56,7 +57,7 @@ object WidgetRenderer {
     private var artBitmap: Bitmap? = null
 
     /** Hooked into PlayerController's 500ms refresher (set up in PoetApp). */
-    fun onSnapshot(context: Context, s: PlayerController.Snapshot) {
+    fun onSnapshot(context: Context, s: PlayerSnapshot) {
         if (s.trackId == lastTrackId && s.playing == lastPlaying) return
         lastTrackId = s.trackId
         lastPlaying = s.playing
@@ -121,7 +122,7 @@ object WidgetRenderer {
         context: Context,
         layout: Int,
         full: Boolean,
-        s: PlayerController.Snapshot,
+        s: PlayerSnapshot,
         fav: Boolean,
         art: Bitmap?,
         accent: Int,

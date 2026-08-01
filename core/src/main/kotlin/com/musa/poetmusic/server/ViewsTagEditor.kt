@@ -1,6 +1,6 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.data.TagEditor
+import com.musa.poetmusic.data.FileExtras
 import com.musa.poetmusic.data.Track
 
 /** Full-height three-tab tag editor sheet (Details / Artwork / Lyrics). */
@@ -14,7 +14,7 @@ object TagEditorViews {
           <input type="text" name="$name" value="${esc(value)}"${if (numeric) """ inputmode="numeric"""" else ""}${if (required) " required" else ""}>
         </label>"""
 
-    /** A batch field: blank submits as "leave unchanged" (see TagEditor.BatchForm). */
+    /** A batch field: blank submits as "leave unchanged" (see BatchTagForm). */
     private fun batchField(label: String, name: String, placeholder: String, numeric: Boolean = false): String = """
         <label class="ed-field">
           <span>$label</span>
@@ -28,13 +28,12 @@ object TagEditorViews {
      * rename pattern). Every field starts blank, and blank means "keep what
      * each track already has" — so the sheet can only ever add information.
      */
-    fun batchTagEditorSheet(tracks: List<Track>, ids: String): String {
-        val mp3s = tracks.count { it.displayName.endsWith(".mp3", ignoreCase = true) }
-        val others = tracks.size - mp3s
+    fun batchTagEditorSheet(tracks: List<Track>, ids: String, writableCount: Int): String {
+        val others = tracks.size - writableCount
         val note = when {
             others == 0 -> "Written into all ${tracks.size} files"
-            mp3s == 0 -> "No MP3s selected — tags are saved to the Poet library only"
-            else -> "$mp3s written to file · $others saved to the library only (MP3 tag writing)"
+            writableCount == 0 -> "None of these formats can be written here — tags are saved to the Poet library only"
+            else -> "$writableCount written to file · $others saved to the library only"
         }
         val preview = tracks.take(3).joinToString(", ") { esc(it.title) } +
             if (tracks.size > 3) " and ${tracks.size - 3} more" else ""
@@ -85,10 +84,10 @@ object TagEditorViews {
      * Poet design. The header "Save Metadata Changes" bar fires an hx-put form
      * bundle at /api/library/edit-tags/{id}; artwork picking, the rename
      * toggle, the lyrics-mode switch and the synced-LRC maker are driven by the
-     * scoped script at the bottom. Non-MP3 files still save to the library.
+     * scoped script at the bottom. Formats this platform cannot write still
+     * save to the library.
      */
-    fun tagEditorSheet(t: Track, extras: TagEditor.FileExtras, isCurrent: Boolean): String {
-        val isMp3 = t.displayName.endsWith(".mp3", ignoreCase = true)
+    fun tagEditorSheet(t: Track, extras: FileExtras, isCurrent: Boolean, writesToFile: Boolean): String {
         val ext = t.displayName.substringAfterLast('.', "")
         val artInitials = esc(initials(t.title))
         val comment = extras.comment ?: t.comment
@@ -97,8 +96,8 @@ object TagEditorViews {
             if (t.hasArt) """<img src="/api/art/${t.id}" alt="">"""
             else artInitials
         val saveNote =
-            if (isMp3) "Written to the file &amp; re-scanned into the library"
-            else "Non-MP3 file — tags are saved to the Poet library only"
+            if (writesToFile) "Written to the file &amp; re-scanned into the library"
+            else "This format can't be written here — tags are saved to the Poet library only"
 
         return """
         <div class="sheet-shield" onclick="poetCloseEditor()"></div>
@@ -182,8 +181,8 @@ object TagEditorViews {
                   </div>
                 </div>
                 <div style="font-size:12px; color:var(--muted); text-align:center; max-width:280px; line-height:1.5;">
-                  ${if (isMp3) "Select a local PNG or JPEG. Removing artwork trims the embedded image to save file size."
-                    else "Cover-art editing writes into MP3 files only. Other formats keep their existing artwork."}
+                  ${if (writesToFile) "Select a local PNG or JPEG. Removing artwork trims the embedded image to save file size."
+                    else "Cover-art editing needs a writable tag format. This file keeps its existing artwork."}
                 </div>
               </div>
             </div>

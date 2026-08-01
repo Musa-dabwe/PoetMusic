@@ -1,6 +1,6 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.data.MusicDatabase
+import com.musa.poetmusic.data.LibraryStore
 import com.musa.poetmusic.data.Playlist
 import com.musa.poetmusic.data.Track
 
@@ -44,7 +44,7 @@ object DrawerViews {
      * list carried into every follow-up action; `cq` re-supplies the queue
      * context for play/navigation.
      */
-    fun optionsDrawer(db: MusicDatabase, tracks: List<Track>, ids: String, ctx: QueueCtx): String {
+    fun optionsDrawer(db: LibraryStore, tracks: List<Track>, ids: String, ctx: QueueCtx): String {
         val single = tracks.size == 1
         val first = tracks.first()
         val cq = ctx.query()
@@ -121,7 +121,7 @@ object DrawerViews {
     }
 
     /** Dispatches a drawer sub-sheet by kind. */
-    fun subSheet(kind: String, db: MusicDatabase, tracks: List<Track>, ids: String, ctx: QueueCtx, infoSizeBytes: Long = -1): String {
+    fun subSheet(kind: String, db: LibraryStore, tracks: List<Track>, ids: String, ctx: QueueCtx, infoSizeBytes: Long = -1): String {
         val cq = ctx.query()
         val back = "poetSubBack('$ids','${esc(cq)}')"
         return when (kind) {
@@ -137,7 +137,7 @@ object DrawerViews {
         if (tracks.size == 1) "“${esc(tracks.first().title)}”"
         else "${tracks.size} songs"
 
-    private fun addPlaylistSheet(db: MusicDatabase, tracks: List<Track>, ids: String, back: String): String {
+    private fun addPlaylistSheet(db: LibraryStore, tracks: List<Track>, ids: String, back: String): String {
         val picks = db.playlists().joinToString("") { p ->
             """
             <button class="pl-pick" data-pid="${p.id}" onclick="poetPlToggle(this)">

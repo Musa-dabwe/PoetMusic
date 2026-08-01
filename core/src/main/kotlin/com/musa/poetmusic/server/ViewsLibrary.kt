@@ -1,11 +1,11 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.data.MusicDatabase
+import com.musa.poetmusic.data.LibraryStore
 
 /** Library tabs, sort drawer and the album / artist / playlist detail screens. */
 object LibraryViews {
 
-    fun libraryScreen(db: MusicDatabase, tab: String, q: String, sort: String): String {
+    fun libraryScreen(db: LibraryStore, tab: String, q: String, sort: String): String {
         val tabs = listOf("Songs", "Albums", "Artists", "Genres", "Playlists")
         val tabBtns = tabs.joinToString("") { name ->
             val active = if (name.lowercase() == tab) " active" else ""
@@ -19,7 +19,7 @@ object LibraryViews {
             else -> songsTab(db, q, sort)
         }
         return """
-        <div class="screen" data-screen="library">
+        <div class="screen" data-screen="library" data-tab="$tab">
           <div style="display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap;">$tabBtns</div>
           $body
         </div>"""
@@ -32,7 +32,7 @@ object LibraryViews {
           Sort
         </button>"""
 
-    private fun songsTab(db: MusicDatabase, q: String, sort: String): String {
+    private fun songsTab(db: LibraryStore, q: String, sort: String): String {
         val ctx = QueueCtx("songs", q, sort)
         val total = ctx.total(db)
         if (total == 0 && q.isEmpty()) {
@@ -85,7 +85,7 @@ object LibraryViews {
         </div>"""
     }
 
-    private fun albumsTab(db: MusicDatabase, sort: String): String {
+    private fun albumsTab(db: LibraryStore, sort: String): String {
         val albums = db.albums(sort)
         if (albums.isEmpty()) return """<div class="empty">No albums yet.</div>"""
         val cards = albums.joinToString("") { a ->
@@ -102,7 +102,7 @@ object LibraryViews {
         <div class="grid">$cards</div>"""
     }
 
-    private fun artistsTab(db: MusicDatabase, sort: String): String {
+    private fun artistsTab(db: LibraryStore, sort: String): String {
         val artists = db.artists(sort)
         if (artists.isEmpty()) return """<div class="empty">No artists yet.</div>"""
         val rows = artists.joinToString("") { a ->
@@ -125,7 +125,7 @@ object LibraryViews {
      * the Journal; this is the entry point that makes it navigable. Tracks with
      * no genre tag are simply absent — there is no "Unknown genre" bucket.
      */
-    private fun genresTab(db: MusicDatabase, sort: String): String {
+    private fun genresTab(db: LibraryStore, sort: String): String {
         val genres = db.genres(sort)
         if (genres.isEmpty()) {
             return """
@@ -149,7 +149,7 @@ object LibraryViews {
         <div style="display:flex; flex-direction:column; gap:6px;">$rows</div>"""
     }
 
-    private fun playlistsTab(db: MusicDatabase): String {
+    private fun playlistsTab(db: LibraryStore): String {
         val favCount = db.favorites().size
         val favRow = """
         <div class="row" hx-get="/screens/favorites" hx-target="#main-container">
@@ -183,7 +183,7 @@ object LibraryViews {
 
     // ---------------- detail screens ----------------
 
-    fun albumScreen(db: MusicDatabase, album: String, artist: String): String {
+    fun albumScreen(db: LibraryStore, album: String, artist: String): String {
         val ctx = QueueCtx("album", album = album, artist = artist)
         val tracks = ctx.resolve(db)
         // Prefer a track that carries a cover, so an album whose art sits on a
@@ -206,7 +206,7 @@ object LibraryViews {
         </div>"""
     }
 
-    fun artistScreen(db: MusicDatabase, name: String): String {
+    fun artistScreen(db: LibraryStore, name: String): String {
         val ctx = QueueCtx("artist", artist = name)
         val tracks = ctx.resolve(db)
         return """
@@ -219,7 +219,7 @@ object LibraryViews {
         </div>"""
     }
 
-    fun genreScreen(db: MusicDatabase, name: String): String {
+    fun genreScreen(db: LibraryStore, name: String): String {
         val ctx = QueueCtx("genre", genre = name)
         val tracks = ctx.resolve(db)
         if (tracks.isEmpty()) {
@@ -239,7 +239,7 @@ object LibraryViews {
         </div>"""
     }
 
-    fun favoritesScreen(db: MusicDatabase): String {
+    fun favoritesScreen(db: LibraryStore): String {
         val ctx = QueueCtx("favorites")
         val tracks = ctx.resolve(db)
         return """
@@ -252,7 +252,7 @@ object LibraryViews {
         </div>"""
     }
 
-    fun playlistScreen(db: MusicDatabase, pid: Long): String {
+    fun playlistScreen(db: LibraryStore, pid: Long): String {
         val pl = db.playlist(pid) ?: return """<div class="empty">Playlist not found.</div>"""
         val ctx = QueueCtx("playlist", pid = pid)
         val tracks = ctx.resolve(db)

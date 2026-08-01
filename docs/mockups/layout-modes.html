@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Poet Music — layout modes mockup</title>
+<!--
+  ===========================================================================
+  Poet Music — layout modes mockup            docs/native-ui-solidification.md §2
+  ===========================================================================
+
+  Static review artefact. No htmx, no server, no build step: open it in a
+  desktop browser straight from the repo.
+
+  HOW IT WORKS
+  ------------
+  Each preview frame is a fixed-size element with `container-type: size`, and
+  every layout rule below is a `@container shell (...)` query. Picking a mode
+  only resizes the frame — the layout then reacts through the *real*
+  breakpoints. So the queries in the "BREAKPOINTS" block are the deliverable:
+  they port to poet.css as plain media queries, unchanged.
+
+  `container-type: size` also makes the frame the containing block for
+  position:fixed descendants, which is why the media tray, sheets and modals
+  stay inside their frame instead of escaping to the browser viewport.
+
+  ONE MARKUP TREE, MANY MODES
+  ---------------------------
+  Every screen is written once and rearranged by CSS, matching the constraint
+  in §4: no layout logic inside the per-screen Views*.kt builders, so the same
+  server-rendered HTML can serve all modes. The two places where markup really
+  must differ (nav rail vs. header pills; Journal/About as modal vs.
+  full-screen) are present in the DOM at all times and toggled by CSS — which
+  is exactly how they should land in Shell.kt.
+
+  Tokens below mirror Shell.kt:42-74 (light) and poet.css:10-46 (dark).
+  Cover art is a CSS gradient using the app's own 45° stripe pattern; no new
+  binary assets.
+-->
+<style>
+/* ==========================================================================
+   0. FONT
+   The shipping font lives in the app assets. The relative path below works
+   when the file is served over http (e.g. `python3 -m http.server` from the
+   repo root); over file:// Chrome blocks it via CORS and the system stack
+   takes over. Metrics are close enough for a layout review either way.
+   ========================================================================== */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../../app/src/main/assets/web/outfit-latin.woff2') format('woff2');
+}
+
+/* ==========================================================================
+   1. MOCKUP CHROME  (not part of the app — always dark, like a design tool)
+   ========================================================================== */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: #101014;
+  color: #e8e6f0;
+  font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+}
+.chrome-head {
+  position: sticky; top: 0; z-index: 100;
+  background: #17171d; border-bottom: 1px solid #2a2a33;
+  padding: 12px 18px;
+}
+.chrome-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.chrome-sub { font-size: 12px; color: #8f8ba3; margin-top: 2px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; }
+.tgroup { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tlabel {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #6f6b82; margin-right: 2px;
+}
+.tbtn {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  border: 1px solid #34343f; background: #202028; color: #cfcbdd;
+  padding: 6px 11px; border-radius: 8px; cursor: pointer;
+}
+.tbtn:hover { border-color: #4a4a58; }
+.tbtn.on { background: #b9a5ec; border-color: #b9a5ec; color: #23202e; }
+.tbtn small { display: block; font-size: 10px; font-weight: 500; opacity: 0.75; }
+.stage { padding: 26px 18px 60px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.framecap { font-size: 12px; color: #8f8ba3; font-variant-numeric: tabular-nums; }
+.framecap b { color: #d8d4e8; font-weight: 700; }
+.sizer { width: calc(var(--fw) * var(--z) * 1px); height: calc(var(--fh) * var(--z) * 1px); }
+.frame {
+  width: calc(var(--fw) * 1px);
+  height: calc(var(--fh) * 1px);
+  transform: scale(var(--z));
+  transform-origin: top left;
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 0 0 1px #34343f, 0 24px 60px rgba(0,0,0,0.6);
+  /* THE mechanism: size containment makes @container queries below behave
+     like viewport media queries, scoped to this frame. */
+  container-type: size;
+  container-name: shell;
+}
+.notes {
+  max-width: 900px; margin: 0 auto; padding: 0 18px 80px;
+  font-size: 13.5px; line-height: 1.6; color: #b9b5c9;
+}
+.notes h2 { font-size: 16px; color: #f0eef8; margin: 34px 0 8px; }
+.notes h3 { font-size: 13px; color: #d8d4e8; margin: 20px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.notes code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; background: #1e1e26; padding: 1px 5px; border-radius: 5px; color: #c9b9f5; }
+.notes ul { margin: 6px 0; padding-left: 20px; }
+.notes li { margin: 4px 0; }
+.notes table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 12.5px; }
+.notes th, .notes td { text-align: left; border-bottom: 1px solid #2a2a33; padding: 7px 10px; vertical-align: top; }
+.notes th { color: #8f8ba3; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ==========================================================================
+   2. DESIGN TOKENS  —  mirrors Shell.kt:42-74 + poet.css:10-46
+   Scoped to .poet so each frame themes independently of the chrome.
+   ========================================================================== */
+.poet {
+  color-scheme: light;
+  --accent: #b9a5ec;
+  --accent-faint: #b9a5ec2e;
+  --accent-soft: #b9a5ec66;
+  --accent-shadow: #b9a5ec80;
+  --bg: #f2effa;              /* Lavender canvas tint */
+  --ink: #3b3651;
+  --muted: #8a84a3;
+  --faint: #b4aecb;
+  --lyric-dim: #a49ec0;
+  --link: #7a68b8;
+  --card-bg: #ffffff;
+  --card-glass: rgba(255,255,255,0.85);
+  --menu-glass: rgba(255,255,255,0.92);
+  --lyrics-glass: rgba(255,255,255,0.7);
+  --input-bg: #ffffff;
+  --overlay-faint: rgba(59,54,81,0.03);
+  --overlay-neutral: rgba(59,54,81,0.06);
+  --overlay-strong: rgba(59,54,81,0.18);
+  --divider: rgba(59,54,81,0.08);
+  --card-border: rgba(59,54,81,0.12);
+  --card-border-soft: rgba(59,54,81,0.15);
+  --card-border-strong: rgba(59,54,81,0.28);
+  --grabber: rgba(59,54,81,0.15);
+  --shadow-card: rgba(59,54,81,0.06);
+  --track-empty: rgba(59,54,81,0.12);
+  --panel-strong: #3b3651;
+  --panel-strong-text: #f5f3fa;
+  --inset-bg: #f2effa;
+  --on-accent: #3b3651;
+}
+.poet[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16151d;
+  --ink: #f0f0f5;
+  --muted: #a6a2b8;
+  --faint: #7b7690;
+  --lyric-dim: #7b7690;
+  --link: #c3b2f0;
+  --card-bg: #1e1e24;
+  --card-glass: #1e1e24;
+  --menu-glass: #26262e;
+  --lyrics-glass: #1e1e24;
+  --input-bg: #26262e;
+  --overlay-faint: rgba(255,255,255,0.04);
+  --overlay-neutral: rgba(255,255,255,0.07);
+  --overlay-strong: rgba(255,255,255,0.18);
+  --divider: rgba(255,255,255,0.08);
+  --card-border: rgba(255,255,255,0.12);
+  --card-border-soft: rgba(255,255,255,0.14);
+  --card-border-strong: rgba(255,255,255,0.3);
+  --grabber: rgba(255,255,255,0.18);
+  --shadow-card: rgba(0,0,0,0.45);
+  --accent-shadow: rgba(0,0,0,0.5);
+  --track-empty: rgba(255,255,255,0.16);
+  --panel-strong: #26262e;
+  --panel-strong-text: #f0f0f5;
+  --inset-bg: #26262e;
+}
+
+/* ==========================================================================
+   3. SHELL SKELETON  —  base tier is PORTRAIT MOBILE (today's layout)
+   --------------------------------------------------------------------------
+   --shell-w is the single source of truth for the 480px cap that is currently
+   copy-pasted across #app / #tray / #cab / .drawer / .sheet / .queue-panel /
+   .editor-sheet (see §3.2). Wider modes just raise it.
+   --safe-l is the display-cutout gutter (§3.1); the "Show cutout" toggle sets
+   it so the landscape frames can be reviewed against a real notch.
+   ========================================================================== */
+.poet {
+  --shell-w: 480px;
+  --rail-w: 0px;
+  --tray-h: 68px;
+  --safe-l: 0px;
+  position: absolute; inset: 0;
+  display: flex;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Outfit', system-ui, sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.poet.cutout { --safe-l: 42px; }
+.cutout-band {
+  display: none;
+  position: absolute; left: 0; top: 0; bottom: 0; width: var(--safe-l);
+  background: #000; z-index: 90; pointer-events: none;
+}
+.poet.cutout .cutout-band { display: block; }
+
+.shell {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  max-width: var(--shell-w);
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ---- header (portrait + tablet) ---- */
+.hdr { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 10px; flex: 0 0 auto; }
+.hdr-brand { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.hdr-logo { width: 30px; height: 30px; padding: 5px; border-radius: 9px; background: var(--accent); color: #3b3651; display: flex; align-items: center; justify-content: center; }
+.hdr-logo svg { width: 100%; height: 100%; }
+.hdr-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+.hdr-nav { display: flex; gap: 8px; }
+.navpill { border: none; cursor: pointer; padding: 8px 14px; border-radius: 99px; font-size: 13px; font-weight: 600; background: transparent; color: var(--ink); font-family: inherit; }
+.navpill.active { background: var(--accent-faint); }
+
+/* ---- nav rail (landscape / tablet / pc) ---- */
+.rail { display: none; flex-direction: column; gap: 2px; flex: 0 0 var(--rail-w); padding: 12px 8px; border-right: 1px solid var(--divider); background: var(--card-bg); z-index: 40; }
+.rail-brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 14px; }
+.rail-brand .hdr-logo { flex: 0 0 auto; }
+.rail-brand .hdr-name { display: none; }
+.rail-sec { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); padding: 14px 10px 6px; display: none; }
+.rail-item {
+  display: flex; align-items: center; gap: 12px;
+  border: none; background: transparent; color: var(--ink); font-family: inherit;
+  font-size: 13.5px; font-weight: 600; cursor: pointer;
+  padding: 10px; border-radius: 11px; width: 100%; text-align: left;
+}
+.rail-item .ri-ico { flex: 0 0 20px; height: 20px; display: flex; align-items: center; justify-content: center; opacity: 0.8; }
+.rail-item .ri-txt { display: none; white-space: nowrap; overflow: hidden; }
+.rail-item.on { background: var(--accent-faint); }
+.rail-item.on .ri-ico { opacity: 1; }
+.rail-spacer { flex: 1; }
+
+/* ---- content ---- */
+.content { flex: 1; min-height: 0; display: flex; position: relative; }
+.pane-main { flex: 1; min-width: 0; overflow-y: auto; padding: 6px 20px calc(var(--tray-h) + 24px); }
+/* the library is the backdrop for every overlay screen, so it stays rendered
+   unless Settings takes the pane */
+.screen[data-s="library"] { display: block; }
+.screen[data-s="settings"] { display: none; }
+.poet[data-screen="settings"] .screen[data-s="library"] { display: none; }
+.poet[data-screen="settings"] .screen[data-s="settings"] { display: block; }
+
+/* ---- media tray / transport bar ---- */
+.tray {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 0;
+  width: 100%; max-width: var(--shell-w); z-index: 35;
+  background: var(--card-glass);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--divider);
+  padding: 10px 16px;
+}
+.poet[data-theme="dark"] .tray { backdrop-filter: none; }
+.tray-progress { position: absolute; top: 0; left: 0; height: 2px; width: 34%; background: var(--accent); }
+.tray-inner { display: flex; align-items: center; gap: 12px; }
+.tray-info { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; cursor: pointer; }
+.tray-art { width: 42px; height: 42px; border-radius: 10px; flex: 0 0 auto; overflow: hidden; }
+.tray-title { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tray-artist { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tray-center { display: flex; align-items: center; gap: 6px; }
+.tray-btns { display: flex; align-items: center; gap: 6px; }
+.tray-seek { display: none; align-items: center; gap: 10px; width: 100%; }
+.tray-extra { display: none; align-items: center; gap: 6px; }
+.tray-btn { border: none; background: transparent; color: var(--ink); cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.tray-play { border: none; cursor: pointer; width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; }
+.tray-only-wide { display: none; }
+
+/* ==========================================================================
+   4. LIBRARY
+   ========================================================================== */
+.lib-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.pill { border: none; cursor: pointer; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 99px; background: var(--overlay-neutral); color: var(--ink); font-family: inherit; }
+.pill.active { background: var(--accent); color: var(--on-accent); }
+.lib-actions { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.btn-primary { border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 700; font-family: inherit; box-shadow: 0 2px 8px var(--accent-shadow); }
+.btn-outline { border: 1.5px solid var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 12px; background: var(--card-bg); color: var(--ink); font-size: 14px; font-weight: 700; font-family: inherit; }
+.lib-search { display: flex; gap: 10px; margin-bottom: 14px; }
+.search { flex: 1; min-width: 0; background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 12px 16px; font-size: 14px; color: var(--muted); }
+.sortbtn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--ink); font-family: inherit; font-size: 13px; font-weight: 600; padding: 0 16px; border-radius: 14px; cursor: pointer; }
+
+.rows { display: flex; flex-direction: column; gap: 2px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px; cursor: pointer; }
+.row.playing { background: var(--accent-faint); }
+.row-art { width: 44px; height: 44px; border-radius: 10px; flex: 0 0 auto; overflow: hidden; }
+.row-main { flex: 1; min-width: 0; }
+.row-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-dur { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.row-menu { color: var(--muted); font-size: 16px; padding: 0 4px; }
+
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.album-card { cursor: pointer; }
+.album-art { aspect-ratio: 1; border-radius: 16px; overflow: hidden; }
+.album-name { font-size: 13.5px; font-weight: 700; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.album-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.artist-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px; }
+.artist-face { width: 44px; height: 44px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: rgba(59,54,81,0.65); }
+.genre-wrap { display: flex; flex-wrap: wrap; gap: 9px; }
+.genre { display: flex; align-items: center; gap: 8px; border-radius: 99px; padding: 9px 15px; background: var(--accent-faint); font-size: 13px; font-weight: 600; }
+.genre span { color: var(--muted); font-weight: 600; }
+.plist { display: flex; flex-direction: column; gap: 2px; }
+.plist-row { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; }
+.plist-ico { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-faint); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+
+.lib-heading { display: none; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 14px; }
+.tab-body { display: none; }
+.poet[data-tab="songs"]     .tab-body[data-t="songs"],
+.poet[data-tab="albums"]    .tab-body[data-t="albums"],
+.poet[data-tab="artists"]   .tab-body[data-t="artists"],
+.poet[data-tab="genres"]    .tab-body[data-t="genres"],
+.poet[data-tab="playlists"] .tab-body[data-t="playlists"] { display: block; }
+
+/* ==========================================================================
+   5. NOW PLAYING  +  QUEUE   (both live in .side)
+   --------------------------------------------------------------------------
+   On mobile .side is a full-bleed route over the library; on PC it is a
+   permanent column — the Groove behaviour, where basic control never costs a
+   navigation. Same DOM either way.
+   ========================================================================== */
+.side { display: none; position: absolute; inset: 0; z-index: 30; background: var(--bg); flex-direction: column; min-width: 0; }
+.poet[data-screen="now-playing"] .side,
+.poet[data-screen="queue"] .side { display: flex; }
+/* the queue slides *over* the library, so the pane itself must not paint */
+.poet[data-screen="queue"] .side { background: transparent; }
+.poet[data-screen="now-playing"] .queue,
+.poet[data-screen="queue"] .np { display: none; }
+
+.np { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 6px 20px calc(var(--tray-h) + 16px); }
+.backlink { border: none; background: transparent; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); padding: 6px 0; margin-bottom: 6px; font-family: inherit; align-self: flex-start; flex: 0 0 auto; }
+.np-grid { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 0; }
+/* §1.2 — the art is the flexible element: it absorbs slack and shrinks first,
+   instead of a fixed min(78vw,320px) that forces the page to scroll. */
+.np-art {
+  flex: 1 1 auto; min-height: 0; max-height: 320px;
+  aspect-ratio: 1; width: auto; max-width: 100%;
+  border-radius: 24px; overflow: hidden;
+  box-shadow: 0 16px 40px var(--accent-shadow);
+  margin-bottom: 18px;
+}
+.np-art .art { width: 100%; height: 100%; }
+.np-mid { flex: 0 0 auto; width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; }
+.np-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; text-align: center; }
+.np-artist { font-size: 14px; color: var(--muted); margin-top: 4px; margin-bottom: 18px; }
+.np-seek { width: 100%; }
+.seek { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--accent) 34%, var(--track-empty) 34%); position: relative; }
+.seek::after { content: ""; position: absolute; left: 34%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--ink); border: 3px solid var(--card-bg); }
+.seek-times { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 6px; }
+.np-transport { display: flex; align-items: center; gap: 18px; margin-top: 16px; }
+.np-dot { border: none; cursor: pointer; width: 44px; height: 44px; border-radius: 50%; background: var(--overlay-neutral); color: var(--ink); display: flex; align-items: center; justify-content: center; }
+.np-dot.on { background: var(--accent-soft); }
+.np-side-btn { border: none; cursor: pointer; width: 52px; height: 52px; border-radius: 50%; background: var(--card-bg); color: var(--ink); box-shadow: 0 2px 8px rgba(59,54,81,0.12); display: flex; align-items: center; justify-content: center; }
+.np-main { border: none; cursor: pointer; width: 76px; height: 76px; border-radius: 50%; background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 20px var(--accent-shadow); display: flex; align-items: center; justify-content: center; }
+/* §1.2 — one line, never wraps; scrolls sideways only as a last resort. */
+.np-chips {
+  display: flex; align-items: center; gap: 8px; margin-top: 20px;
+  width: 100%; max-width: 340px;
+  overflow-x: auto; scrollbar-width: none; justify-content: center;
+  flex: 0 0 auto; padding-bottom: 2px;
+}
+.np-chips::-webkit-scrollbar { display: none; }
+.chip { border: none; cursor: pointer; padding: 9px 16px; border-radius: 99px; background: var(--overlay-neutral); color: var(--ink); font-size: 13px; font-weight: 600; font-family: inherit; white-space: nowrap; flex: 0 0 auto; }
+.chip.on { background: var(--accent-soft); }
+
+/* lyrics: the ONLY scroller on Now Playing (§1.3) */
+.np-lyrics { display: none; width: 100%; min-height: 0; flex: 1 1 auto; margin-top: 14px; }
+.poet[data-lyrics="on"] .np-lyrics { display: flex; }
+/* art yields its space to the deck rather than pushing it off-screen */
+.poet[data-lyrics="on"] .np-art { max-height: 150px; margin-bottom: 12px; }
+.lyrics-deck {
+  flex: 1; min-height: 0; width: 100%; max-width: 340px; margin: 0 auto;
+  background: var(--lyrics-glass); backdrop-filter: blur(8px);
+  border-radius: 16px; padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.poet[data-theme="dark"] .lyrics-deck { backdrop-filter: none; }
+.lyric { font-size: 13px; font-weight: 500; color: var(--lyric-dim); }
+.lyric.active { font-size: 16px; font-weight: 700; color: var(--ink); }
+
+/* Now Playing inline panel — tablet only. Fills the room freed by hiding the
+   mini player, and swaps out for the lyrics deck when lyrics are toggled on. */
+.np-panel {
+  display: none; flex-direction: column;
+  width: 100%; max-width: 560px; margin: 18px auto 0;
+  flex: 1 1 auto; min-height: 0;
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: 18px; overflow: hidden; box-shadow: 0 2px 10px var(--shadow-card);
+}
+.np-panel-head { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--divider); flex: 0 0 auto; }
+.np-panel-title { font-size: 13px; font-weight: 700; }
+.np-panel-head .ed-tabs { padding: 0; border: none; margin-left: auto; }
+.np-panel-head .pill { padding: 6px 12px; font-size: 12px; }
+.np-panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; }
+
+/* §1 / review note: on every mode where Now Playing is a full route, the mini
+   player is redundant — it duplicates the transport directly above it and
+   steals the height the art needs. Zeroing --tray-h reclaims that space for
+   every rule keyed off it. The PC tiers override this: there Now Playing is a
+   pane, and the bar IS the player. */
+.poet[data-screen="now-playing"] { --tray-h: 0px; }
+.poet[data-screen="now-playing"] .tray { display: none; }
+
+/* ---- queue ---- */
+.queue { position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: var(--shell-w); max-height: 86%; z-index: 65; background: var(--card-bg); border-radius: 24px 24px 0 0; box-shadow: 0 -8px 40px rgba(0,0,0,0.18); display: flex; flex-direction: column; }
+.queue-shield { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.32); z-index: 60; }
+.poet[data-screen="queue"] .queue-shield { display: block; }
+.qp-hdr { display: flex; align-items: center; gap: 12px; padding: 14px 18px 10px; border-bottom: 1px solid var(--divider); flex: 0 0 auto; }
+.qp-back { border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 11px; background: var(--overlay-neutral); color: var(--ink); display: flex; align-items: center; justify-content: center; }
+.qp-title { font-size: 15px; font-weight: 700; }
+.qp-src { font-size: 12px; color: var(--muted); }
+.qp-clear { border: none; cursor: pointer; background: var(--overlay-neutral); color: var(--ink); font-family: inherit; font-size: 12px; font-weight: 700; padding: 7px 13px; border-radius: 99px; }
+.qp-body { overflow-y: auto; overscroll-behavior: contain; min-height: 0; padding: 10px 14px 18px; }
+.qp-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); padding: 6px 6px; }
+.qp-now { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; background: var(--accent-faint); }
+.qp-eq { display: flex; align-items: flex-end; gap: 3px; height: 16px; }
+.qp-eq span { width: 3px; background: var(--accent); border-radius: 2px; }
+.qp-eq span:nth-child(1) { height: 60%; } .qp-eq span:nth-child(2) { height: 100%; } .qp-eq span:nth-child(3) { height: 40%; }
+.qp-playbtn { border: none; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; }
+.q-row { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 12px; }
+.q-num { width: 18px; text-align: center; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.q-grip { color: var(--faint); cursor: grab; padding: 0 2px; }
+
+/* ==========================================================================
+   6. SETTINGS
+   ========================================================================== */
+.card { background: var(--card-bg); border-radius: 18px; padding: 18px; box-shadow: 0 2px 10px var(--shadow-card); break-inside: avoid; }
+.card-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.card-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.set-stack { display: flex; flex-direction: column; gap: 16px; }
+.set-h { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+.folder-row { display: flex; align-items: center; gap: 10px; background: var(--overlay-faint); border: 1px solid var(--card-border); border-radius: 12px; padding: 9px 12px; }
+.folder-path { flex: 1; font-size: 12.5px; font-family: ui-monospace, monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swatches { display: flex; gap: 10px; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.swatch.on { border-color: var(--ink); }
+.tint-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.tint-pill { border: 1px solid var(--card-border-soft); border-radius: 99px; padding: 8px 15px; font-size: 12.5px; font-weight: 600; color: #3b3651; cursor: pointer; font-family: inherit; }
+.tint-pill.on { border-color: var(--ink); }
+.theme-opt { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--card-border-soft); background: var(--card-bg); color: var(--ink); border-radius: 12px; padding: 10px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; }
+.theme-opt.on { border-color: var(--accent); background: var(--accent-faint); }
+.eqbands { display: flex; align-items: flex-end; gap: 10px; height: 74px; padding: 6px 2px; }
+.eqband { flex: 1; background: var(--overlay-neutral); border-radius: 4px; position: relative; }
+.eqband i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); border-radius: 4px; }
+
+/* ==========================================================================
+   7. OVERLAYS: journal, about, tag editor, drawers
+   Mobile = full-screen takeover / bottom sheet.  PC = centred card modal.
+   ========================================================================== */
+.ov { display: none; position: absolute; inset: 0; z-index: 70; }
+.poet[data-screen="journal"]  .ov[data-o="journal"],
+.poet[data-screen="about"]    .ov[data-o="about"],
+.poet[data-screen="tageditor"] .ov[data-o="tageditor"],
+.poet[data-screen="drawers"]  .ov[data-o="drawers"] { display: block; }
+.ov-shield { position: absolute; inset: 0; background: rgba(0,0,0,0.34); opacity: 0; pointer-events: none; }
+.ov-card { position: absolute; inset: 0; background: var(--card-bg); display: flex; flex-direction: column; overflow: hidden; }
+.ov-bar { display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-bottom: 1px solid var(--divider); flex: 0 0 auto; }
+.ov-bar-title { font-size: 15px; font-weight: 700; }
+.ov-close { border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 11px; background: var(--overlay-neutral); color: var(--ink); display: flex; align-items: center; justify-content: center; margin-left: auto; }
+.ov-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px; }
+
+/* journal */
+.j-cols { display: block; }
+.j-hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 10px 0 18px; }
+.j-portrait { width: 96px; height: 96px; border-radius: 50%; overflow: hidden; box-shadow: 0 3px 14px var(--shadow-card); }
+.j-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 14px; }
+.j-kicker { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.j-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0 20px; }
+.j-tile { background: var(--inset-bg); border-radius: 14px; padding: 14px 10px; text-align: center; }
+.j-tile-v { font-size: 20px; font-weight: 700; }
+.j-tile-l { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.j-sec { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin: 20px 0 8px; }
+.j-song { display: flex; align-items: center; gap: 12px; padding: 7px 4px; }
+.j-rank { width: 20px; font-size: 13px; font-weight: 700; color: var(--faint); }
+.j-albums { display: flex; gap: 13px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.j-album { flex: 0 0 132px; }
+.j-cover { width: 132px; height: 132px; border-radius: 15px; overflow: hidden; }
+
+/* about */
+.md { font-size: 14px; line-height: 1.65; }
+.md h1 { font-size: 22px; margin: 0 0 10px; }
+.md h2 { font-size: 15px; margin: 22px 0 6px; }
+.md p { margin: 0 0 12px; color: var(--muted); }
+.md ul { margin: 0 0 12px; padding-left: 20px; color: var(--muted); }
+.md a { color: var(--link); }
+
+/* tag editor — bottom sheet on mobile */
+.ov[data-o="tageditor"] .ov-card { top: 8%; border-radius: 24px 24px 0 0; }
+.ed-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px 10px; }
+.ed-head-art { width: 46px; height: 46px; border-radius: 11px; overflow: hidden; flex: 0 0 auto; }
+.ed-tabs { display: flex; gap: 6px; padding: 0 18px 12px; border-bottom: 1px solid var(--divider); }
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); margin-bottom: 5px; }
+.field div.inp { background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 11px 14px; font-size: 14px; }
+.ed-grid { display: grid; grid-template-columns: 1fr; gap: 0 14px; }
+
+/* drawers: sort + sleep, bottom sheets on mobile */
+.drawer { position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: var(--shell-w); background: var(--card-bg); border-radius: 24px 24px 0 0; padding: 10px 0 16px; box-shadow: 0 -8px 40px rgba(0,0,0,0.18); }
+.sheet-grab { width: 38px; height: 4px; border-radius: 2px; background: var(--grabber); margin: 4px auto 12px; }
+.drawer-head { display: flex; align-items: center; gap: 12px; padding: 0 18px 12px; }
+.drawer-head-art { width: 48px; height: 48px; border-radius: 12px; background: var(--accent-faint); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.ditem { display: flex; align-items: center; gap: 14px; padding: 12px 20px; cursor: pointer; }
+.dicon { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-faint); display: flex; align-items: center; justify-content: center; font-size: 15px; flex: 0 0 auto; }
+.ditem-t { font-size: 14px; font-weight: 600; }
+.ditem-s { font-size: 12px; color: var(--muted); }
+
+/* shared art placeholder — the app's own 45° stripe pattern */
+.art { background: repeating-linear-gradient(45deg, var(--c), var(--c) 14px, var(--card-bg) 14px, var(--card-bg) 28px); }
+.a1 { --c: #b9a5ec; } .a2 { --c: #9fd8c0; } .a3 { --c: #f4b89a; } .a4 { --c: #a5c9ec; }
+.a5 { --c: #e8a9c4; } .a6 { --c: #c9d9a0; } .a7 { --c: #d9b8f0; } .a8 { --c: #f0cf9a; }
+
+/* the mode badge each frame prints in its corner, so screenshots are legible */
+.mode-badge { position: absolute; right: 8px; top: 8px; z-index: 95; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 99px; padding: 3px 9px; opacity: 0.9; }
+
+
+/* ==========================================================================
+   ==========================================================================
+   BREAKPOINTS — THE DELIVERABLE (§3.3)
+   --------------------------------------------------------------------------
+   These five tiers are what ports into poet.css. Replace `@container shell`
+   with `@media` and they are the shipping rules, verbatim. The min-height
+   guards matter: an 800x360 landscape phone and an 834px tablet overlap on
+   width alone, which is exactly the trap a width-only breakpoint set falls
+   into.
+
+     portrait mobile   base (no query)              360x800
+     landscape mobile  (max-height: 500px)          800x360, 915x412
+     tablet            (min-width: 700px)  and (min-height: 501px)
+     pc compact        (min-width: 1100px) and (min-height: 501px)
+     pc wide           (min-width: 1400px) and (min-height: 501px)
+   ==========================================================================
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   TIER 2 — LANDSCAPE MOBILE.  The constraint is height, not width.
+   Header out, icon rail in, everything two-column, tray shortened.
+   -------------------------------------------------------------------------- */
+@container shell (max-height: 500px) {
+  .poet { --shell-w: 100%; --rail-w: 56px; --tray-h: 54px; }
+  .hdr { display: none; }
+  .rail { display: flex; padding-left: calc(8px + var(--safe-l)); }
+  .pane-main { padding: 14px 18px calc(var(--tray-h) + 14px); }
+  .lib-tabs { display: none; }             /* tabs live in the rail now */
+  .lib-heading { display: block; font-size: 18px; margin-bottom: 12px; }
+  .lib-actions { margin-bottom: 10px; }
+  .btn-primary, .btn-outline { padding: 8px 15px; font-size: 13px; }
+  .lib-search { margin-bottom: 10px; }
+  .search { padding: 9px 14px; font-size: 13px; }
+  /* two columns: the list is the whole point of the extra width */
+  .rows { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
+  .grid { grid-template-columns: repeat(4, 1fr); }
+  .plist { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
+  .set-stack { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .set-h { grid-column: 1 / -1; }
+
+  .tray { left: var(--rail-w); right: 0; width: auto; transform: none; padding: 6px 16px; }
+  .tray-art { width: 36px; height: 36px; }
+  .tray-play { width: 36px; height: 36px; }
+
+  /* Now Playing: art left, controls right, lyrics as a third column */
+  .np { padding: 12px 18px calc(var(--tray-h) + 10px); }
+  .backlink { display: none; }             /* the rail owns navigation */
+  .np-grid { flex-direction: row; align-items: center; gap: 22px; }
+  /* flex:0 0 auto, not 0 1 auto: shrinking overrides aspect-ratio on the
+     width while height stays 100%, stretching the cover into a rectangle */
+  .np-art { max-height: 100%; margin-bottom: 0; flex: 0 0 auto; height: 100%; }
+  .np-mid { flex: 1 1 260px; max-width: 360px; }
+  .np-title { font-size: 18px; text-align: left; align-self: flex-start; }
+  .np-artist { font-size: 13px; margin-bottom: 12px; align-self: flex-start; }
+  .np-transport { margin-top: 12px; gap: 12px; }
+  .np-main { width: 56px; height: 56px; }
+  .np-side-btn { width: 42px; height: 42px; }
+  .np-dot { width: 34px; height: 34px; }
+  .np-chips { margin-top: 12px; justify-content: flex-start; }
+  .chip { padding: 6px 11px; font-size: 12px; }
+  .np-lyrics { margin-top: 0; flex: 1 1 260px; height: 100%; }
+  /* the art gives up height so the third column is readable */
+  .poet[data-lyrics="on"] .np-art { height: 62%; }
+  .lyrics-deck { max-width: none; }
+
+  /* sheets become SIDE sheets — a bottom sheet at 360px tall is unusable */
+  .queue { left: auto; right: 0; top: 0; bottom: 0; transform: none; width: 380px; max-width: 380px; max-height: none; border-radius: 20px 0 0 20px; }
+  .drawer { left: auto; right: 0; top: 0; bottom: 0; transform: none; width: 360px; max-width: 360px; border-radius: 20px 0 0 20px; overflow-y: auto; }
+  .ov[data-o="tageditor"] .ov-card { top: 0; left: auto; width: 440px; border-radius: 20px 0 0 20px; }
+  .ov-body { padding-left: calc(18px + var(--safe-l)); }
+  .j-cols { columns: 2; column-gap: 22px; }
+  .j-cols > * { break-inside: avoid; }
+}
+
+/* --------------------------------------------------------------------------
+   TIER 3 — TABLET.  Room for a labelled rail and real multi-column content.
+   -------------------------------------------------------------------------- */
+@container shell (min-width: 700px) and (min-height: 501px) {
+  .poet { --shell-w: 100%; --rail-w: 210px; --tray-h: 74px; }
+  .hdr { display: none; }
+  .rail { display: flex; }
+  .rail-brand .hdr-name { display: block; }
+  .rail-item .ri-txt { display: block; }
+  .rail-sec { display: block; }
+  .pane-main { padding: 22px 26px calc(var(--tray-h) + 24px); max-width: 1000px; }
+  .lib-tabs { display: none; }
+  .lib-heading { display: block; }
+  .rows { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 20px; }
+  .grid { grid-template-columns: repeat(4, 1fr); }
+  .plist { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 20px; }
+  .set-stack { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .set-h { grid-column: 1 / -1; }
+  .tray { left: var(--rail-w); right: 0; width: auto; transform: none; }
+  .tray-seek { display: flex; }
+  .tray-center { flex-direction: column; gap: 4px; flex: 1 1 420px; max-width: 520px; }
+
+  /* Now Playing (tablet): cover art on top, every control centred beneath it.
+     A tablet is portrait-shaped and has height to spare, so the landscape
+     two-column split is the wrong instinct here — it shrinks the art and
+     pushes the controls into a narrow side gutter. */
+  .np { padding: 24px 30px 22px; }
+  .np-grid { flex-direction: column; align-items: center; justify-content: flex-start; gap: 0; }
+  .np-art { flex: 0 0 auto; width: min(320px, 48%); height: auto; max-height: 320px; margin: 0 auto 20px; }
+  .np-mid { flex: 0 0 auto; max-width: 440px; align-items: center; }
+  .np-title { text-align: center; align-self: center; }
+  .np-artist { align-self: center; }
+  .np-transport { justify-content: center; }
+  .np-chips { justify-content: center; max-width: 440px; }
+  .np-lyrics { flex: 1 1 auto; width: 100%; max-width: 560px; margin: 18px auto 0; height: auto; min-height: 0; }
+  .poet[data-lyrics="on"] .np-art { max-height: 240px; width: min(240px, 40%); }
+  /* the freed space below the controls becomes the inline tag editor */
+  .np-panel { display: flex; }
+  .poet[data-lyrics="on"] .np-panel { display: none; }
+
+  /* dialogs, not sheets */
+  .queue { left: 50%; right: auto; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: 460px; max-width: 460px; max-height: 78%; border-radius: 20px; }
+  .drawer { left: 50%; right: auto; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: 420px; max-width: 420px; border-radius: 20px; }
+  .sheet-grab { display: none; }
+  .ov[data-o="tageditor"] .ov-card { top: 50%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: 620px; height: 80%; border-radius: 20px; }
+  .j-cols { columns: 2; column-gap: 26px; }
+  .j-cols > * { break-inside: avoid; }
+}
+
+/* --------------------------------------------------------------------------
+   TIER 4 — PC COMPACT.  Groove-style single window:
+   rail | library | Now Playing pane, with a full-width transport bar.
+   Secondary screens stop being routes and become card modals.
+   -------------------------------------------------------------------------- */
+@container shell (min-width: 1100px) and (min-height: 501px) {
+  .poet { --rail-w: 224px; --tray-h: 84px; }
+  /* Now Playing is a pane here, not a route: the bar IS the player, so it
+     stays put and keeps reserving its height. */
+  .poet[data-screen="now-playing"] { --tray-h: 84px; }
+  .poet[data-screen="now-playing"] .tray { display: block; }
+  .content { padding-bottom: var(--tray-h); }
+  .pane-main { padding: 24px 30px 24px; max-width: none; }
+
+  /* Now Playing is a permanent column, never a navigation */
+  .side, .poet[data-screen="queue"] .side { display: flex !important; position: static; flex: 0 0 330px; border-left: 1px solid var(--divider); background: var(--card-bg); z-index: 1; }
+  .poet[data-screen="now-playing"] .queue { display: none; }
+  .backlink { display: none; }
+  .np { padding: 24px 22px; }
+  .np-grid { flex-direction: column; gap: 0; }
+  .np-art { width: 100%; max-height: 286px; margin: 0 auto 18px; }
+  .poet[data-lyrics="on"] .np-art { width: 100%; }
+  .np-panel { display: none; }        /* tablet-only affordance */
+  .np-title { font-size: 18px; text-align: center; }
+  .np-artist { text-align: center; }
+  .np-mid { max-width: none; }
+  /* the transport bar owns playback, so the pane keeps only the extras */
+  .np-transport { display: none; }
+  .np-chips { justify-content: center; margin-top: 16px; }
+  .np-lyrics { margin-top: 14px; }
+  .poet[data-lyrics="on"] .np-art { max-height: 180px; }
+
+  /* queue docks into the pane instead of covering the window */
+  .queue { position: static; transform: none; width: auto; max-width: none; max-height: none; border-radius: 0; box-shadow: none; background: transparent; border-top: 1px solid var(--divider); }
+  .queue-shield { display: none !important; }
+  .poet[data-screen="queue"] .side { flex: 0 0 380px; }
+  .poet[data-screen="queue"] .np { display: none; }
+
+  /* transport bar spans the whole window, rail included — the rail reserves
+     room for it so its bottom items never sit underneath */
+  .tray {
+    left: calc(0px - var(--rail-w)); right: auto;
+    width: calc(100% + var(--rail-w)); max-width: none;
+    transform: none; padding: 12px 24px;
+    background: var(--card-bg); z-index: 45;
+  }
+  .rail { padding-bottom: calc(var(--tray-h) + 12px); }
+  .tray-inner { gap: 24px; }
+  .tray-info { flex: 0 1 280px; }
+  .tray-center { flex: 1 1 auto; flex-direction: column; gap: 5px; max-width: 620px; margin: 0 auto; }
+  .tray-seek { display: flex; }
+  .tray-extra { display: flex; flex: 0 1 200px; justify-content: flex-end; }
+  .tray-btns { gap: 10px; }
+  .tray-play { width: 44px; height: 44px; }
+  .tray-only-wide { display: none; }
+
+  /* pointer affordances the touch build never needed (§4) */
+  .row:hover, .rail-item:hover, .q-row:hover { background: var(--overlay-neutral); }
+  .row.playing:hover { background: var(--accent-faint); }
+  .tbtn:focus-visible, .row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Journal / About / Tag editor: centred card modals over the shell */
+  .ov-shield { opacity: 1; }
+  .ov-card, .ov[data-o="tageditor"] .ov-card {
+    top: 50%; left: 50%; right: auto; bottom: auto;
+    transform: translate(-50%, -50%);
+    width: min(860px, 78%); height: min(660px, 84%);
+    border-radius: 22px; box-shadow: 0 24px 70px rgba(0,0,0,0.4);
+  }
+  .ov[data-o="tageditor"] .ov-card { width: min(680px, 66%); }
+  .ov-body { padding: 24px 30px; }
+  .j-cols { columns: 2; column-gap: 30px; }
+  .j-cols > * { break-inside: avoid; }
+  .md { max-width: 68ch; }               /* line length cap for wide windows */
+  .drawer { left: 50%; right: auto; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: 420px; max-width: 420px; border-radius: 20px; }
+  .sheet-grab { display: none; }
+  .ed-grid { grid-template-columns: 1fr 1fr; }
+  .grid { grid-template-columns: repeat(4, 1fr); }
+  .rows { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 22px; }
+  .plist { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 22px; }
+}
+
+/* --------------------------------------------------------------------------
+   TIER 5 — PC WIDE.  Three columns: rail | library | Now Playing + queue,
+   all visible at once. Grids widen with more columns, text stays capped.
+   -------------------------------------------------------------------------- */
+@container shell (min-width: 1400px) and (min-height: 501px) {
+  .poet { --rail-w: 250px; }
+  .pane-main { padding: 28px 38px; }
+  .side { flex: 0 0 390px; }
+  /* both panels live in the column — the queue no longer replaces anything */
+  .poet[data-screen="queue"] .side { flex: 0 0 390px; }
+  .poet[data-screen="queue"] .np,
+  .poet[data-screen="now-playing"] .queue { display: flex; }
+  .np { flex: 0 0 auto; }
+  .queue { flex: 1 1 auto; min-height: 0; }
+  .np-art { max-height: 320px; }
+  .rows { grid-template-columns: 1fr 1fr 1fr; gap: 2px 26px; }
+  .plist { grid-template-columns: 1fr 1fr 1fr; }
+  .grid { grid-template-columns: repeat(6, 1fr); }
+  .set-stack { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; align-items: start; }
+  .set-h { grid-column: 1 / -1; }
+  .genre-wrap { max-width: 1100px; }
+  .tray-only-wide { display: flex; }
+  .j-cols { columns: 3; column-gap: 34px; }
+  .ov-card { width: min(1000px, 72%); height: min(720px, 82%); }
+}
+</style>
+</head>
+<body>
+
+<div class="chrome-head">
+  <div class="chrome-title">Poet Music — layout modes mockup</div>
+  <div class="chrome-sub">
+    docs/native-ui-solidification.md §2 · review artefact, no app code touched ·
+    frames use container queries, so the layout responds to the <em>real</em> breakpoints
+  </div>
+
+  <div class="toolbar">
+    <div class="tgroup">
+      <span class="tlabel">Mode</span>
+      <button class="tbtn on" data-mode="portrait" data-w="360"  data-h="800">Portrait mobile<small>360 × 800</small></button>
+      <button class="tbtn"    data-mode="land-s"   data-w="800"  data-h="360">Landscape<small>800 × 360</small></button>
+      <button class="tbtn"    data-mode="land-l"   data-w="915"  data-h="412">Landscape<small>915 × 412</small></button>
+      <button class="tbtn"    data-mode="tablet"   data-w="834"  data-h="1112">Tablet<small>834 × 1112</small></button>
+      <button class="tbtn"    data-mode="pc"       data-w="1280" data-h="800">PC compact<small>1280 × 800</small></button>
+      <button class="tbtn"    data-mode="pc-wide"  data-w="1920" data-h="1080">PC wide<small>1920 × 1080</small></button>
+    </div>
+
+    <div class="tgroup">
+      <span class="tlabel">Screen</span>
+      <button class="tbtn on" data-screen="library">Library</button>
+      <button class="tbtn"    data-screen="now-playing">Now Playing</button>
+      <button class="tbtn"    data-screen="queue">Queue</button>
+      <button class="tbtn"    data-screen="settings">Settings</button>
+      <button class="tbtn"    data-screen="journal">Journal</button>
+      <button class="tbtn"    data-screen="about">About</button>
+      <button class="tbtn"    data-screen="tageditor">Tag editor</button>
+      <button class="tbtn"    data-screen="drawers">Drawers</button>
+    </div>
+
+    <div class="tgroup">
+      <span class="tlabel">Tab</span>
+      <button class="tbtn on" data-tab="songs">Songs</button>
+      <button class="tbtn"    data-tab="albums">Albums</button>
+      <button class="tbtn"    data-tab="artists">Artists</button>
+      <button class="tbtn"    data-tab="genres">Genres</button>
+      <button class="tbtn"    data-tab="playlists">Playlists</button>
+    </div>
+
+    <div class="tgroup">
+      <span class="tlabel">Options</span>
+      <button class="tbtn" id="t-theme">Dark</button>
+      <button class="tbtn" id="t-lyrics">Lyrics on</button>
+      <button class="tbtn" id="t-cutout">Show cutout</button>
+      <button class="tbtn on" id="t-zoom">Fit</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="framecap"><b id="cap-mode">Portrait mobile</b> · <span id="cap-size">360 × 800</span> · <span id="cap-bp">base tier (no query)</span> · <span id="cap-zoom">100%</span></div>
+  <div class="sizer" id="sizer" style="--fw:360; --fh:800; --z:1;">
+    <div class="frame" id="frame" style="--fw:360; --fh:800; --z:1;">
+
+      <!-- ============================================================ -->
+      <!-- THE APP                                                       -->
+      <!-- ============================================================ -->
+      <div class="poet" id="poet" data-theme="light" data-screen="library" data-tab="songs" data-lyrics="off">
+
+        <div class="mode-badge" id="badge">Portrait mobile</div>
+        <div class="cutout-band"></div>
+
+        <!-- nav rail: PC/tablet/landscape. Present in the DOM always; CSS
+             decides whether it renders. Mirrors §4 "introduce the nav-rail
+             markup behind the PC breakpoints in Shell.kt". -->
+        <nav class="rail">
+          <div class="rail-brand">
+            <div class="hdr-logo">
+              <svg viewBox="0 0 512 512" fill="none" aria-hidden="true">
+                <rect x="20" y="20" width="472" height="472" rx="100" stroke="currentColor" stroke-width="40"></rect>
+                <rect x="160" y="180" width="40" height="152" rx="20" fill="currentColor"></rect>
+                <rect x="236" y="100" width="40" height="312" rx="20" fill="currentColor"></rect>
+                <rect x="312" y="240" width="40" height="172" rx="20" fill="currentColor"></rect>
+              </svg>
+            </div>
+            <div class="hdr-name">Poet</div>
+          </div>
+          <div class="rail-sec">Library</div>
+          <button class="rail-item on" data-rail-tab="songs" title="Songs"><span class="ri-ico">♪</span><span class="ri-txt">Songs</span></button>
+          <button class="rail-item" data-rail-tab="albums" title="Albums"><span class="ri-ico">▣</span><span class="ri-txt">Albums</span></button>
+          <button class="rail-item" data-rail-tab="artists" title="Artists"><span class="ri-ico">☻</span><span class="ri-txt">Artists</span></button>
+          <button class="rail-item" data-rail-tab="genres" title="Genres"><span class="ri-ico">◈</span><span class="ri-txt">Genres</span></button>
+          <button class="rail-item" data-rail-tab="playlists" title="Playlists"><span class="ri-ico">≡</span><span class="ri-txt">Playlists</span></button>
+          <div class="rail-sec">Collection</div>
+          <button class="rail-item" title="Favourites"><span class="ri-ico">♥</span><span class="ri-txt">Favourites</span></button>
+          <button class="rail-item" data-rail-screen="queue" title="Queue"><span class="ri-ico">⋮≡</span><span class="ri-txt">Queue</span></button>
+          <button class="rail-item" data-rail-screen="journal" title="Listening Journal"><span class="ri-ico">◐</span><span class="ri-txt">Journal</span></button>
+          <div class="rail-spacer"></div>
+          <button class="rail-item" data-rail-screen="settings" title="Settings"><span class="ri-ico">⚙</span><span class="ri-txt">Settings</span></button>
+          <button class="rail-item" data-rail-screen="about" title="About"><span class="ri-ico">ⓘ</span><span class="ri-txt">About</span></button>
+        </nav>
+
+        <div class="shell">
+          <!-- header: portrait only; the rail replaces it everywhere else -->
+          <header class="hdr">
+            <div class="hdr-brand">
+              <div class="hdr-logo">
+                <svg viewBox="0 0 512 512" fill="none" aria-hidden="true">
+                  <rect x="20" y="20" width="472" height="472" rx="100" stroke="currentColor" stroke-width="40"></rect>
+                  <rect x="160" y="180" width="40" height="152" rx="20" fill="currentColor"></rect>
+                  <rect x="236" y="100" width="40" height="312" rx="20" fill="currentColor"></rect>
+                  <rect x="312" y="240" width="40" height="172" rx="20" fill="currentColor"></rect>
+                </svg>
+              </div>
+              <div class="hdr-name">Poet</div>
+            </div>
+            <div class="hdr-nav">
+              <button class="navpill active">Library</button>
+              <button class="navpill">Settings</button>
+            </div>
+          </header>
+
+          <div class="content">
+            <main class="pane-main">
+
+              <!-- ================= LIBRARY ================= -->
+              <section class="screen" data-s="library">
+                <div class="lib-heading" id="lib-heading">Songs</div>
+                <div class="lib-tabs">
+                  <button class="pill active" data-pill="songs">Songs</button>
+                  <button class="pill" data-pill="albums">Albums</button>
+                  <button class="pill" data-pill="artists">Artists</button>
+                  <button class="pill" data-pill="genres">Genres</button>
+                  <button class="pill" data-pill="playlists">Playlists</button>
+                </div>
+
+                <div class="tab-body" data-t="songs">
+                  <div class="lib-actions">
+                    <button class="btn-primary">▶ Play all</button>
+                    <button class="btn-outline">⇄ Shuffle all</button>
+                  </div>
+                  <div class="lib-search">
+                    <div class="search">Search songs, artists, albums…</div>
+                    <div class="sortbtn">≡ Sort</div>
+                  </div>
+                  <div class="rows" id="song-rows"></div>
+                </div>
+
+                <div class="tab-body" data-t="albums">
+                  <div class="lib-search">
+                    <div class="search">Search albums…</div>
+                    <div class="sortbtn">≡ Sort</div>
+                  </div>
+                  <div class="grid" id="album-grid"></div>
+                </div>
+
+                <div class="tab-body" data-t="artists">
+                  <div class="lib-search">
+                    <div class="search">Search artists…</div>
+                    <div class="sortbtn">≡ Sort</div>
+                  </div>
+                  <div class="rows" id="artist-rows"></div>
+                </div>
+
+                <div class="tab-body" data-t="genres">
+                  <div class="genre-wrap" id="genre-wrap"></div>
+                </div>
+
+                <div class="tab-body" data-t="playlists">
+                  <div class="lib-actions"><button class="btn-primary">+ New playlist</button></div>
+                  <div class="plist" id="playlist-rows"></div>
+                </div>
+              </section>
+
+              <!-- ================= SETTINGS ================= -->
+              <section class="screen" data-s="settings">
+                <div class="set-stack">
+                  <div class="set-h">Settings</div>
+
+                  <div class="card">
+                    <div class="card-title">Music folders</div>
+                    <div class="card-sub">Local directories scanned for audio files</div>
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+                      <div class="folder-row"><span>▣</span><span class="folder-path">/storage/emulated/0/Music</span><span style="color:var(--muted);">✕</span></div>
+                      <div class="folder-row"><span>▣</span><span class="folder-path">/storage/emulated/0/Download/albums</span><span style="color:var(--muted);">✕</span></div>
+                    </div>
+                    <button class="btn-primary" style="width:100%; justify-content:center;">+ Add folder directory</button>
+                  </div>
+
+                  <div class="card">
+                    <div class="card-title">Library scan</div>
+                    <div class="card-sub">418 tracks · last scanned 2 hours ago</div>
+                    <button class="btn-outline" style="width:100%; justify-content:center;">Trigger library scan</button>
+                  </div>
+
+                  <div class="card">
+                    <div class="card-title">Equalizer</div>
+                    <div class="card-sub">Shape the sound of every track Poet plays</div>
+                    <div class="tint-row" style="margin-bottom:10px;">
+                      <span class="pill active">Flat</span><span class="pill">Rock</span><span class="pill">Pop</span><span class="pill">Jazz</span>
+                    </div>
+                    <div class="eqbands">
+                      <div class="eqband"><i style="height:40%"></i></div>
+                      <div class="eqband"><i style="height:62%"></i></div>
+                      <div class="eqband"><i style="height:48%"></i></div>
+                      <div class="eqband"><i style="height:70%"></i></div>
+                      <div class="eqband"><i style="height:55%"></i></div>
+                    </div>
+                  </div>
+
+                  <div class="card">
+                    <div class="card-title">Playback</div>
+                    <div class="card-sub">Restart the current song when Previous is pressed after…</div>
+                    <div class="tint-row"><span class="pill">Never</span><span class="pill active">3 s</span><span class="pill">5 s</span><span class="pill">10 s</span></div>
+                  </div>
+
+                  <div class="card">
+                    <div class="card-title">Appearance</div>
+                    <div class="card-sub">Switch between the light and dark colour set</div>
+                    <div style="display:flex; gap:8px;">
+                      <button class="theme-opt on">☀ Light</button>
+                      <button class="theme-opt">☾ Dark</button>
+                    </div>
+                  </div>
+
+                  <div class="card">
+                    <div class="card-title">Accent &amp; canvas</div>
+                    <div class="card-sub">Pastel accent colour and canvas tint</div>
+                    <div class="swatches" style="margin-bottom:12px;">
+                      <div class="swatch on" style="background:#b9a5ec;"></div>
+                      <div class="swatch" style="background:#9fd8c0;"></div>
+                      <div class="swatch" style="background:#f4b89a;"></div>
+                      <div class="swatch" style="background:#a5c9ec;"></div>
+                    </div>
+                    <div class="tint-row">
+                      <div class="tint-pill on" style="background:#f2effa;">Lavender</div>
+                      <div class="tint-pill" style="background:#faf5ec;">Cream</div>
+                      <div class="tint-pill" style="background:#eff6f0;">Sage</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+            </main>
+
+            <!-- ============ NOW PLAYING + QUEUE (one column on PC) ============ -->
+            <div class="side">
+              <section class="np">
+                <button class="backlink">← Library</button>
+                <div class="np-grid">
+                  <div class="np-art"><div class="art a3"></div></div>
+                  <div class="np-mid">
+                    <div class="np-title">Paper Lanterns</div>
+                    <div class="np-artist">Marla Quinn</div>
+                    <div class="np-seek">
+                      <div class="seek"></div>
+                      <div class="seek-times"><span>1:07</span><span>3:14</span></div>
+                    </div>
+                    <div class="np-transport">
+                      <button class="np-dot" title="Shuffle off">⇄</button>
+                      <button class="np-side-btn" title="Previous">⏮</button>
+                      <button class="np-main" title="Play or pause">
+                        <span style="display:flex; gap:6px;">
+                          <span style="width:6px; height:24px; background:currentColor; border-radius:2px;"></span>
+                          <span style="width:6px; height:24px; background:currentColor; border-radius:2px;"></span>
+                        </span>
+                      </button>
+                      <button class="np-side-btn" title="Next">⏭</button>
+                      <button class="np-dot" title="Repeat playlist">↻</button>
+                    </div>
+                    <div class="np-chips">
+                      <button class="chip">1.0x</button>
+                      <button class="chip">sleep</button>
+                      <button class="chip" id="chip-lyrics">lyrics</button>
+                      <button class="chip on">favourite</button>
+                      <button class="chip">queue</button>
+                    </div>
+                  </div>
+                  <div class="np-lyrics">
+                    <div class="lyrics-deck">
+                      <div class="lyric">Counting every streetlight on the way home</div>
+                      <div class="lyric">Paper lanterns strung across the avenue</div>
+                      <div class="lyric active">And I kept the ticket stub inside my coat</div>
+                      <div class="lyric">Folded twice, the ink had almost gone</div>
+                      <div class="lyric">You said the season turns without a sound</div>
+                      <div class="lyric">I said the season never asked me first</div>
+                      <div class="lyric">Counting every streetlight on the way home</div>
+                      <div class="lyric">Paper lanterns strung across the avenue</div>
+                      <div class="lyric">And I kept the ticket stub inside my coat</div>
+                    </div>
+                  </div>
+
+                  <!-- tablet only: the room the mini player used to take is
+                       given to the tag editor for the playing track -->
+                  <div class="np-panel">
+                    <div class="np-panel-head">
+                      <div class="np-panel-title">Edit tags</div>
+                      <div class="ed-tabs">
+                        <button class="pill active">Details</button>
+                        <button class="pill">Artwork</button>
+                        <button class="pill">Lyrics</button>
+                      </div>
+                    </div>
+                    <div class="np-panel-body">
+                      <div class="ed-grid" style="grid-template-columns:1fr 1fr;">
+                        <div class="field"><label>Title</label><div class="inp">Paper Lanterns</div></div>
+                        <div class="field"><label>Artist</label><div class="inp">Marla Quinn</div></div>
+                        <div class="field"><label>Album</label><div class="inp">Lantern Season</div></div>
+                        <div class="field"><label>Album artist</label><div class="inp">Marla Quinn</div></div>
+                        <div class="field"><label>Genre</label><div class="inp">Indie folk</div></div>
+                        <div class="field"><label>Year</label><div class="inp">2023</div></div>
+                      </div>
+                      <button class="btn-primary" style="width:100%; justify-content:center;">Save tags</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="queue">
+                <div class="qp-hdr">
+                  <button class="qp-back" title="Close queue">⌄</button>
+                  <div style="flex:1; min-width:0;">
+                    <div class="qp-title">Queue</div>
+                    <div class="qp-src">Playing from Songs</div>
+                  </div>
+                  <button class="qp-clear">Clear</button>
+                </div>
+                <div class="qp-body">
+                  <div class="qp-label">Now playing</div>
+                  <div class="qp-now">
+                    <div class="row-art" style="width:52px; height:52px; border-radius:12px;"><div class="art a3" style="width:100%; height:100%;"></div></div>
+                    <div class="row-main">
+                      <div class="row-title" style="font-size:15px; font-weight:700;">Paper Lanterns</div>
+                      <div class="row-sub">Marla Quinn</div>
+                    </div>
+                    <div class="qp-eq"><span></span><span></span><span></span></div>
+                    <button class="qp-playbtn">▮▮</button>
+                  </div>
+                  <div class="qp-label" style="margin-top:20px;">Next up · 6 songs · 24 min</div>
+                  <div id="queue-rows"></div>
+                </div>
+              </section>
+            </div>
+            <div class="queue-shield"></div>
+          </div>
+
+          <!-- ================= MEDIA TRAY / TRANSPORT BAR ================= -->
+          <div class="tray">
+            <div class="tray-progress"></div>
+            <div class="tray-inner">
+              <div class="tray-info">
+                <div class="tray-art"><div class="art a3" style="width:100%; height:100%;"></div></div>
+                <div style="min-width:0;">
+                  <div class="tray-title">Paper Lanterns</div>
+                  <div class="tray-artist">Marla Quinn</div>
+                </div>
+              </div>
+              <div class="tray-center">
+                <div class="tray-btns">
+                  <button class="tray-btn tray-only-wide" title="Shuffle">⇄</button>
+                  <button class="tray-btn" title="Previous">⏮</button>
+                  <button class="tray-play" title="Play or pause">▮▮</button>
+                  <button class="tray-btn" title="Next">⏭</button>
+                  <button class="tray-btn tray-only-wide" title="Repeat">↻</button>
+                </div>
+                <div class="tray-seek">
+                  <span style="font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums;">1:07</span>
+                  <div class="seek" style="flex:1;"></div>
+                  <span style="font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums;">3:14</span>
+                </div>
+              </div>
+              <div class="tray-extra">
+                <button class="tray-btn" title="Lyrics">♫</button>
+                <button class="tray-btn" title="Queue">⋮≡</button>
+                <button class="tray-btn" title="Volume">🔊</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= OVERLAYS ================= -->
+
+        <!-- Listening Journal: full-screen takeover on mobile, card modal on PC -->
+        <div class="ov" data-o="journal">
+          <div class="ov-shield"></div>
+          <div class="ov-card">
+            <div class="ov-bar">
+              <button class="qp-back">←</button>
+              <div class="ov-bar-title">Listening Journal</div>
+              <button class="ov-close">✕</button>
+            </div>
+            <div class="ov-body">
+              <div class="j-hero">
+                <div class="j-portrait"><div class="art a1" style="width:100%; height:100%;"></div></div>
+                <div class="j-title">Everything you've played</div>
+                <div class="j-kicker">Local archive · all time</div>
+              </div>
+              <div class="j-cols">
+                <div>
+                  <div class="j-totals">
+                    <div class="j-tile"><div class="j-tile-v">418</div><div class="j-tile-l">tracks</div></div>
+                    <div class="j-tile"><div class="j-tile-v">2,914</div><div class="j-tile-l">plays</div></div>
+                    <div class="j-tile"><div class="j-tile-v">147 h</div><div class="j-tile-l">listened</div></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="j-sec">Top songs</div>
+                  <div class="j-song"><div class="j-rank">1</div><div class="row-art"><div class="art a3" style="width:100%;height:100%;"></div></div><div class="row-main"><div class="row-title">Paper Lanterns</div><div class="row-sub">Marla Quinn</div></div><div class="row-dur">142×</div></div>
+                  <div class="j-song"><div class="j-rank">2</div><div class="row-art"><div class="art a2" style="width:100%;height:100%;"></div></div><div class="row-main"><div class="row-title">Harbour Lights</div><div class="row-sub">The Ellis Field</div></div><div class="row-dur">118×</div></div>
+                  <div class="j-song"><div class="j-rank">3</div><div class="row-art"><div class="art a4" style="width:100%;height:100%;"></div></div><div class="row-main"><div class="row-title">Slow Static</div><div class="row-sub">Nova Hale</div></div><div class="row-dur">97×</div></div>
+                </div>
+                <div>
+                  <div class="j-sec">Top artists</div>
+                  <div class="artist-row"><div class="artist-face" style="background:#b9a5ec;">MQ</div><div class="row-main"><div class="row-title">Marla Quinn</div><div class="row-sub">312 plays</div></div></div>
+                  <div class="artist-row"><div class="artist-face" style="background:#9fd8c0;">TE</div><div class="row-main"><div class="row-title">The Ellis Field</div><div class="row-sub">244 plays</div></div></div>
+                  <div class="artist-row"><div class="artist-face" style="background:#f4b89a;">NH</div><div class="row-main"><div class="row-title">Nova Hale</div><div class="row-sub">190 plays</div></div></div>
+                </div>
+                <div>
+                  <div class="j-sec">Most played albums</div>
+                  <div class="j-albums">
+                    <div class="j-album"><div class="j-cover"><div class="art a3" style="width:100%;height:100%;"></div></div><div class="album-name">Lantern Season</div><div class="album-sub">Marla Quinn</div></div>
+                    <div class="j-album"><div class="j-cover"><div class="art a2" style="width:100%;height:100%;"></div></div><div class="album-name">Harbour</div><div class="album-sub">The Ellis Field</div></div>
+                    <div class="j-album"><div class="j-cover"><div class="art a5" style="width:100%;height:100%;"></div></div><div class="album-name">Slow Static</div><div class="album-sub">Nova Hale</div></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="j-sec">Genres explored</div>
+                  <div class="genre-wrap">
+                    <div class="genre">Indie folk <span>·&nbsp;84</span></div>
+                    <div class="genre">Ambient <span>·&nbsp;61</span></div>
+                    <div class="genre">Jazz <span>·&nbsp;38</span></div>
+                    <div class="genre">Soul <span>·&nbsp;22</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- About -->
+        <div class="ov" data-o="about">
+          <div class="ov-shield"></div>
+          <div class="ov-card">
+            <div class="ov-bar">
+              <button class="qp-back">←</button>
+              <div class="ov-bar-title">About</div>
+              <button class="ov-close">✕</button>
+            </div>
+            <div class="ov-body">
+              <div class="md">
+                <h1>Poet Music</h1>
+                <p><strong>Version 1.4.0</strong> · offline-first, pastel-themed music player.</p>
+                <p>Your library holds <strong>418 tracks</strong> across <strong>2 folders</strong>.</p>
+                <p>The UI is an <a href="#">htmx</a> single-page app served by an embedded <a href="#">Ktor</a> server running inside the app process and rendered in a native WebView. Playback is handled natively by Media3 / ExoPlayer through a foreground <code>MediaSessionService</code>.</p>
+                <h2>Tech stack</h2>
+                <ul>
+                  <li><strong>Language</strong> — Kotlin</li>
+                  <li><strong>UI</strong> — htmx single-page app in a native WebView</li>
+                  <li><strong>Server</strong> — embedded Ktor (CIO) bound to 127.0.0.1:8080</li>
+                  <li><strong>Playback</strong> — Media3 / ExoPlayer in a foreground MediaSessionService</li>
+                  <li><strong>Storage</strong> — SQLite (tracks, folders, playlists, settings)</li>
+                </ul>
+                <h2>Security &amp; privacy</h2>
+                <ul>
+                  <li><strong>Local-only server</strong> — not reachable from other devices.</li>
+                  <li><strong>No network calls</strong> — no analytics, no user data transmitted.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tag editor -->
+        <div class="ov" data-o="tageditor">
+          <div class="ov-shield"></div>
+          <div class="ov-card">
+            <div class="ed-head">
+              <div class="ed-head-art"><div class="art a3" style="width:100%; height:100%;"></div></div>
+              <div style="flex:1; min-width:0;">
+                <div class="ov-bar-title">Paper Lanterns</div>
+                <div class="row-sub" style="font-family:ui-monospace,monospace;">paper-lanterns.mp3</div>
+              </div>
+              <button class="ov-close">✕</button>
+            </div>
+            <div class="ed-tabs">
+              <button class="pill active">Details</button>
+              <button class="pill">Artwork</button>
+              <button class="pill">Lyrics</button>
+            </div>
+            <div class="ov-body">
+              <div class="ed-grid">
+                <div class="field"><label>Title</label><div class="inp">Paper Lanterns</div></div>
+                <div class="field"><label>Artist</label><div class="inp">Marla Quinn</div></div>
+                <div class="field"><label>Album</label><div class="inp">Lantern Season</div></div>
+                <div class="field"><label>Album artist</label><div class="inp">Marla Quinn</div></div>
+                <div class="field"><label>Genre</label><div class="inp">Indie folk</div></div>
+                <div class="field"><label>Year</label><div class="inp">2023</div></div>
+                <div class="field"><label>Track number</label><div class="inp">4</div></div>
+                <div class="field"><label>Disc number</label><div class="inp">1</div></div>
+              </div>
+              <button class="btn-primary" style="width:100%; justify-content:center; margin-top:6px;">Save tags</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drawers: sort + sleep timer -->
+        <div class="ov" data-o="drawers">
+          <div class="ov-shield" style="opacity:1;"></div>
+          <div class="drawer">
+            <div class="sheet-grab"></div>
+            <div class="drawer-head">
+              <div class="drawer-head-art">☾</div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:15px; font-weight:700;">Sleep timer</div>
+                <div style="font-size:12px; color:var(--muted);">Music pauses when the timer ends</div>
+              </div>
+            </div>
+            <div class="ditem"><div class="dicon">◷</div><div><div class="ditem-t">In 30 min</div></div></div>
+            <div class="ditem"><div class="dicon">◷</div><div><div class="ditem-t">In 1 hr</div></div></div>
+            <div class="ditem"><div class="dicon">⋮≡</div><div><div class="ditem-t">After (N) songs</div><div class="ditem-s">Stop once the songs finish</div></div></div>
+            <div class="ditem"><div class="dicon">⧗</div><div><div class="ditem-t">Custom timer</div><div class="ditem-s">Pick your own minutes</div></div></div>
+            <div class="ditem"><div class="dicon" style="background:rgba(220,90,90,0.16);">✕</div><div><div class="ditem-t" style="color:#d0555f;">Turn off timer</div></div></div>
+          </div>
+        </div>
+
+      </div><!-- /.poet -->
+    </div><!-- /.frame -->
+  </div><!-- /.sizer -->
+</div>
+
+<!-- ==========================================================================
+     NOTES — breakpoints, per-mode decisions, review checklist
+     ========================================================================== -->
+<div class="notes">
+
+  <h2>Breakpoints (port these to poet.css verbatim)</h2>
+  <p>Every rule in this file is a <code>@container shell (…)</code> query. Swap the
+  at-rule for <code>@media</code> and the conditions are the shipping ones. The
+  <code>min-height</code> guards are load-bearing: an 800×360 landscape phone and an
+  834px tablet are indistinguishable on width alone.</p>
+  <table>
+    <tr><th>Tier</th><th>Condition</th><th>Frames</th><th>Shell</th></tr>
+    <tr><td>Portrait mobile</td><td>base — no query</td><td>360 × 800</td><td>Header + pills, 1 column, 480px cap, bottom tray</td></tr>
+    <tr><td>Landscape mobile</td><td><code>(max-height: 500px)</code></td><td>800 × 360, 915 × 412</td><td>56px icon rail, 2-column lists, 54px tray, side sheets</td></tr>
+    <tr><td>Tablet</td><td><code>(min-width: 700px) and (min-height: 501px)</code></td><td>834 × 1112</td><td>210px labelled rail, 2-column lists, dialogs; Now Playing = art on top, centred controls, inline tag editor</td></tr>
+    <tr><td>PC compact</td><td><code>(min-width: 1100px) and (min-height: 501px)</code></td><td>1280 × 800</td><td>224px rail · library · 330px NP pane, full-width transport bar, card modals</td></tr>
+    <tr><td>PC wide</td><td><code>(min-width: 1400px) and (min-height: 501px)</code></td><td>1920 × 1080</td><td>250px rail · library · 390px NP + queue stacked, 3-col lists, 6-col grids</td></tr>
+  </table>
+
+  <h2>Decisions this mockup commits to</h2>
+
+  <h3>Now Playing never scrolls (§1)</h3>
+  <ul>
+    <li>The cover art is the flexible element — <code>flex:1 1 auto; min-height:0; aspect-ratio:1</code> — so it shrinks first and the chip row is never pushed off-screen. It replaces the fixed <code>min(78vw,320px)</code>.</li>
+    <li>The chip row is a single non-wrapping line with <code>overflow-x:auto</code> as the last-resort fallback, so speed / sleep / lyrics / favourite / queue all stay reachable without the page growing.</li>
+    <li>Toggling lyrics shrinks the art rather than extending the page; the deck is the only scroller. Try <em>Lyrics on</em> in every mode — the page never gains a scrollbar.</li>
+    <li>Controls step down by tier (main 76 → 56px, side 52 → 42px, dot 44 → 34px) instead of wrapping.</li>
+    <li><strong>The mini player is hidden whenever Now Playing is a full route</strong> — portrait, landscape and tablet. It duplicates the transport sitting directly above it and costs ~68px of the height the art needs. Implemented by zeroing <code>--tray-h</code>, so every rule keyed off it reclaims the space. The PC tiers override it: there Now Playing is a pane and the bar <em>is</em> the player.</li>
+  </ul>
+
+  <h3>Tablet</h3>
+  <ul>
+    <li>Now Playing puts the cover art <strong>on top</strong> with every control centred beneath it. The landscape two-column split is the wrong instinct on a portrait-shaped 834 × 1112 panel: it shrinks the art and pushes the controls into a narrow side gutter.</li>
+    <li>The space freed by hiding the mini player becomes an <strong>inline tag editor</strong> for the playing track — tablet only. Toggle <em>Lyrics on</em> and the lyrics deck takes that slot instead, so the two never compete.</li>
+    <li>Elsewhere the tablet keeps the 210px labelled rail, 2-column lists and centred dialogs.</li>
+  </ul>
+
+  <h3>Landscape mobile</h3>
+  <ul>
+    <li>The header is the wrong shape when height is the scarce axis — it becomes a 56px icon rail, which also gives the library tabs a permanent home.</li>
+    <li>Bottom sheets become <strong>side sheets</strong>. A 90%-height bottom sheet on a 360px-tall screen is unusable; the queue, sort drawer, sleep timer and tag editor all dock to the right edge instead.</li>
+    <li>Now Playing is art | controls, and lyrics slide in as a third column rather than replacing anything.</li>
+    <li>Turn on <em>Show cutout</em>: the rail and the overlay bodies carry the <code>--safe-l</code> gutter, so nothing lands under the notch. This only works once the Activity opts into <code>windowLayoutInDisplayCutoutMode</code> (§3.1) — the black band in the reference screenshot is the system letterboxing the window, not a CSS bug.</li>
+  </ul>
+
+  <h3>PC — Groove-style single window</h3>
+  <ul>
+    <li>Now Playing stops being a route. It is a permanent right-hand pane, so basic control never costs a navigation, and the transport bar spans the full window — rail included — with an inline seek.</li>
+    <li>The queue docks into that same column instead of covering the window — on PC wide both are visible at once (three columns: rail · library · NP + queue).</li>
+    <li>Journal, About and the Tag editor become centred card modals over the shell, replacing the full-screen takeovers. The Journal body goes 2-column at PC compact and 3-column at PC wide.</li>
+    <li>Prose is capped at <code>68ch</code> so About and the Journal narrative stay readable at 1920px.</li>
+    <li>Hover and <code>:focus-visible</code> states appear only at the PC tiers — the touch build has <code>:active</code> only.</li>
+  </ul>
+
+  <h3>The 480px cap</h3>
+  <ul>
+    <li>Replaced by one <code>--shell-w</code> custom property. Today the literal 480px is repeated across <code>#app</code>, <code>#tray</code>, <code>#cab</code>, <code>.drawer</code>, <code>.sheet</code>, <code>.queue-panel</code> and <code>.editor-sheet</code>; each tier here sets the property once and every surface follows.</li>
+  </ul>
+
+  <h2>Review checklist (§2.5)</h2>
+  <ul>
+    <li><strong>Nothing dropped</strong> — every portrait element has a home in every mode: library tabs → rail items; header nav → rail; bottom sheets → side sheets → dialogs; Now Playing transport → transport bar on PC.</li>
+    <li><strong>Touch targets</strong> — ≥44px in portrait, ≥34px in landscape mobile (the compact tier from §1.2), denser only at the PC tiers where the pointer is the input.</li>
+    <li><strong>Both themes</strong> — flip <em>Dark</em> in each mode. Dark drops every backdrop blur, matching the WebView compositing workaround already in poet.css.</li>
+    <li><strong>Breakpoints written down</strong> — the table above is the set §3.3 implements. No re-deriving them later.</li>
+  </ul>
+
+  <h2>Known gaps (deliberate)</h2>
+  <ul>
+    <li>Album/artist/genre <em>detail</em> screens reuse the songs-list layout and are not mocked separately.</li>
+    <li>The multi-select action bar (<code>#cab</code>), onboarding tip and toast are not mocked; they follow <code>--shell-w</code> and need no independent layout decision.</li>
+    <li>Motion is out of scope — the sheet-up keyframes bake in the <code>-50%</code> centring translate and will need revisiting when <code>--shell-w</code> lands (§3.2).</li>
+  </ul>
+</div>
+
+<script>
+/* ==========================================================================
+   Mockup chrome only. The app markup above is static; this just resizes the
+   frame, flips data-attributes and keeps the caption honest.
+   ========================================================================== */
+(function () {
+  var frame = document.getElementById('frame');
+  var sizer = document.getElementById('sizer');
+  var poet  = document.getElementById('poet');
+  var badge = document.getElementById('badge');
+
+  var MODES = {
+    'portrait': { label: 'Portrait mobile',  bp: 'base tier (no query)' },
+    'land-s':   { label: 'Landscape mobile', bp: '(max-height: 500px)' },
+    'land-l':   { label: 'Landscape mobile', bp: '(max-height: 500px)' },
+    'tablet':   { label: 'Tablet',           bp: '(min-width: 700px) and (min-height: 501px)' },
+    'pc':       { label: 'PC compact',       bp: '(min-width: 1100px) and (min-height: 501px)' },
+    'pc-wide':  { label: 'PC wide',          bp: '(min-width: 1400px) and (min-height: 501px)' }
+  };
+
+  var state = { mode: 'portrait', w: 360, h: 800, fit: true };
+
+  function applySize() {
+    var z = 1;
+    if (state.fit) {
+      var availW = Math.max(320, window.innerWidth - 60);
+      var availH = Math.max(320, window.innerHeight - 260);
+      z = Math.min(1, availW / state.w, availH / state.h);
+    }
+    [frame, sizer].forEach(function (el) {
+      el.style.setProperty('--fw', state.w);
+      el.style.setProperty('--fh', state.h);
+      el.style.setProperty('--z', z);
+    });
+    var m = MODES[state.mode];
+    document.getElementById('cap-mode').textContent = m.label;
+    document.getElementById('cap-size').textContent = state.w + ' × ' + state.h;
+    document.getElementById('cap-bp').textContent   = m.bp;
+    document.getElementById('cap-zoom').textContent = Math.round(z * 100) + '%';
+    badge.textContent = m.label;
+  }
+
+  function pick(group, btn) {
+    group.forEach(function (b) { b.classList.toggle('on', b === btn); });
+  }
+
+  var modeBtns = [].slice.call(document.querySelectorAll('[data-mode]'));
+  modeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.dataset.mode;
+      state.w = +b.dataset.w;
+      state.h = +b.dataset.h;
+      pick(modeBtns, b);
+      applySize();
+    });
+  });
+
+  /* scoped to the toolbar: .poet itself carries data-screen / data-tab */
+  var screenBtns = [].slice.call(document.querySelectorAll('.chrome-head [data-screen]'));
+  function setScreen(name) {
+    poet.dataset.screen = name;
+    screenBtns.forEach(function (b) { b.classList.toggle('on', b.dataset.screen === name); });
+    document.querySelectorAll('[data-rail-screen]').forEach(function (r) {
+      r.classList.toggle('on', r.dataset.railScreen === name);
+    });
+    if (name === 'library') syncRailTab(poet.dataset.tab);
+  }
+  screenBtns.forEach(function (b) {
+    b.addEventListener('click', function () { setScreen(b.dataset.screen); });
+  });
+
+  var tabBtns = [].slice.call(document.querySelectorAll('.chrome-head [data-tab]'));
+  function syncRailTab(tab) {
+    document.querySelectorAll('[data-rail-tab]').forEach(function (r) {
+      r.classList.toggle('on', r.dataset.railTab === tab && poet.dataset.screen === 'library');
+    });
+    document.querySelectorAll('[data-pill]').forEach(function (p) {
+      p.classList.toggle('active', p.dataset.pill === tab);
+    });
+    document.getElementById('lib-heading').textContent =
+      tab.charAt(0).toUpperCase() + tab.slice(1);
+  }
+  function setTab(tab) {
+    poet.dataset.tab = tab;
+    tabBtns.forEach(function (b) { b.classList.toggle('on', b.dataset.tab === tab); });
+    syncRailTab(tab);
+  }
+  tabBtns.forEach(function (b) {
+    b.addEventListener('click', function () { setTab(b.dataset.tab); setScreen('library'); });
+  });
+
+  /* rail and pills inside the frame are live too, so the mockup can be driven
+     the way the app would be */
+  document.querySelectorAll('[data-rail-tab]').forEach(function (r) {
+    r.addEventListener('click', function () { setScreen('library'); setTab(r.dataset.railTab); });
+  });
+  document.querySelectorAll('[data-pill]').forEach(function (p) {
+    p.addEventListener('click', function () { setTab(p.dataset.pill); });
+  });
+  document.querySelectorAll('[data-rail-screen]').forEach(function (r) {
+    r.addEventListener('click', function () { setScreen(r.dataset.railScreen); });
+  });
+
+  var themeBtn = document.getElementById('t-theme');
+  themeBtn.addEventListener('click', function () {
+    var dark = poet.dataset.theme === 'dark';
+    poet.dataset.theme = dark ? 'light' : 'dark';
+    themeBtn.classList.toggle('on', !dark);
+    themeBtn.textContent = dark ? 'Dark' : 'Light';
+  });
+
+  var lyricsBtn = document.getElementById('t-lyrics');
+  function toggleLyrics() {
+    var on = poet.dataset.lyrics === 'on';
+    poet.dataset.lyrics = on ? 'off' : 'on';
+    lyricsBtn.classList.toggle('on', !on);
+    lyricsBtn.textContent = on ? 'Lyrics on' : 'Lyrics off';
+    document.getElementById('chip-lyrics').classList.toggle('on', !on);
+  }
+  lyricsBtn.addEventListener('click', function () {
+    toggleLyrics();
+    if (poet.dataset.screen !== 'now-playing') setScreen('now-playing');
+  });
+  document.getElementById('chip-lyrics').addEventListener('click', toggleLyrics);
+
+  var cutoutBtn = document.getElementById('t-cutout');
+  cutoutBtn.addEventListener('click', function () {
+    var on = poet.classList.toggle('cutout');
+    cutoutBtn.classList.toggle('on', on);
+  });
+
+  var zoomBtn = document.getElementById('t-zoom');
+  zoomBtn.addEventListener('click', function () {
+    state.fit = !state.fit;
+    zoomBtn.classList.toggle('on', state.fit);
+    zoomBtn.textContent = state.fit ? 'Fit' : '100%';
+    applySize();
+  });
+
+  window.addEventListener('resize', applySize);
+
+  /* ---- placeholder content ---- */
+  var SONGS = [
+    ['Paper Lanterns', 'Marla Quinn', '3:14', 3],
+    ['Harbour Lights', 'The Ellis Field', '4:02', 2],
+    ['Slow Static', 'Nova Hale', '3:38', 4],
+    ['Cold Kitchen Floor', 'Marla Quinn', '2:57', 3],
+    ['Every Second Tuesday', 'Pale Arcade', '5:11', 1],
+    ['Roundabout Weather', 'The Ellis Field', '3:45', 2],
+    ['Ferry Timetable', 'Ida Sorensen', '4:29', 5],
+    ['Long Way From Fine', 'Nova Hale', '3:03', 4],
+    ['Attic Tape', 'Pale Arcade', '2:41', 1],
+    ['Blue Hour Errand', 'Ida Sorensen', '4:16', 5],
+    ['Something Like Snow', 'Marla Quinn', '3:52', 3],
+    ['Nine Streets Over', 'Bright Meridian', '3:27', 6],
+    ['Terracotta', 'Bright Meridian', '4:44', 6],
+    ['Half a Reason', 'Nova Hale', '3:19', 4],
+    ['The Long Platform', 'Ida Sorensen', '5:02', 5],
+    ['Corner Shop Radio', 'Pale Arcade', '2:35', 1]
+  ];
+  var ALBUMS = [
+    ['Lantern Season', 'Marla Quinn', 3], ['Harbour', 'The Ellis Field', 2],
+    ['Slow Static', 'Nova Hale', 4], ['Attic Tapes', 'Pale Arcade', 1],
+    ['Ferry Timetable', 'Ida Sorensen', 5], ['Terracotta', 'Bright Meridian', 6],
+    ['Kitchen Floor EP', 'Marla Quinn', 7], ['Blue Hour', 'Ida Sorensen', 8]
+  ];
+  var ARTISTS = [
+    ['Marla Quinn', '3 albums · 34 songs'], ['The Ellis Field', '2 albums · 21 songs'],
+    ['Nova Hale', '2 albums · 18 songs'], ['Pale Arcade', '1 album · 12 songs'],
+    ['Ida Sorensen', '2 albums · 24 songs'], ['Bright Meridian', '1 album · 9 songs']
+  ];
+  var GENRES = [['Indie folk', 84], ['Ambient', 61], ['Jazz', 38], ['Soul', 22], ['Post-rock', 19], ['Electronic', 14]];
+  var PLAYLISTS = [['Late shift', '24 songs'], ['Kitchen radio', '61 songs'], ['Long drive', '38 songs'], ['Slow mornings', '17 songs']];
+
+  function art(n, cls) { return '<div class="row-art ' + (cls || '') + '"><div class="art a' + n + '" style="width:100%;height:100%;"></div></div>'; }
+
+  document.getElementById('song-rows').innerHTML = SONGS.map(function (s, i) {
+    return '<div class="row' + (i === 0 ? ' playing' : '') + '">' + art(s[3]) +
+      '<div class="row-main"><div class="row-title">' + s[0] + '</div><div class="row-sub">' + s[1] + '</div></div>' +
+      '<div class="row-dur">' + s[2] + '</div><div class="row-menu">⋯</div></div>';
+  }).join('');
+
+  document.getElementById('album-grid').innerHTML = ALBUMS.map(function (a) {
+    return '<div class="album-card"><div class="album-art"><div class="art a' + a[2] + '" style="width:100%;height:100%;"></div></div>' +
+      '<div class="album-name">' + a[0] + '</div><div class="album-sub">' + a[1] + '</div></div>';
+  }).join('');
+
+  var FACE = ['#b9a5ec', '#9fd8c0', '#f4b89a', '#a5c9ec', '#e8a9c4', '#c9d9a0'];
+  document.getElementById('artist-rows').innerHTML = ARTISTS.map(function (a, i) {
+    var initials = a[0].split(' ').map(function (w) { return w[0]; }).join('').slice(0, 2);
+    return '<div class="artist-row"><div class="artist-face" style="background:' + FACE[i % 6] + ';">' + initials + '</div>' +
+      '<div class="row-main"><div class="row-title">' + a[0] + '</div><div class="row-sub">' + a[1] + '</div></div>' +
+      '<div class="row-menu">⋯</div></div>';
+  }).join('');
+
+  document.getElementById('genre-wrap').innerHTML = GENRES.map(function (g) {
+    return '<div class="genre">' + g[0] + ' <span>·&nbsp;' + g[1] + '</span></div>';
+  }).join('');
+
+  document.getElementById('playlist-rows').innerHTML = PLAYLISTS.map(function (p) {
+    return '<div class="plist-row"><div class="plist-ico">≡</div>' +
+      '<div class="row-main"><div class="row-title">' + p[0] + '</div><div class="row-sub">' + p[1] + '</div></div>' +
+      '<div class="row-menu">⋯</div></div>';
+  }).join('');
+
+  document.getElementById('queue-rows').innerHTML = SONGS.slice(1, 7).map(function (s, i) {
+    return '<div class="q-row"><div class="q-num">' + (i + 1) + '</div>' + art(s[3]) +
+      '<div class="row-main"><div class="row-title">' + s[0] + '</div><div class="row-sub">' + s[1] + '</div></div>' +
+      '<div class="q-grip">⋮⋮</div></div>';
+  }).join('');
+
+  applySize();
+})();
+</script>
+</body>
+</html>

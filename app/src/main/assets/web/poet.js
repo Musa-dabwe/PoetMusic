@@ -55,7 +55,11 @@ function closeSheet() {
 function positionMenu(menu) {
   menu.style.top = ''; menu.style.bottom = '';
   var r = menu.getBoundingClientRect();
-  var limit = window.innerHeight - 78; /* keep clear of the media tray */
+  /* keep clear of the media tray — measured, not assumed: the tray is 54-84px
+     depending on breakpoint and is hidden entirely on Now Playing (§1.4) */
+  var tray = document.getElementById('tray');
+  var trayH = (tray && tray.offsetParent !== null) ? tray.offsetHeight + 10 : 10;
+  var limit = window.innerHeight - trayH;
   if (r.bottom > limit) {
     menu.style.top = 'auto';
     menu.style.bottom = '52px';
@@ -112,6 +116,18 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
     /* the journal is a full-screen page: it takes over the header's row and
        the container padding for as long as it is the screen being shown */
     document.body.classList.toggle('journal-open', onJournal);
+    /* Now Playing is a fixed-height screen that must not scroll (§1): the flag
+       freezes the page scroller, drops the media tray and lets the cover art
+       flex into whatever height is left. Cleared by every other screen swap,
+       so there is no way to leave the scroller stuck. */
+    var onNp = poetScreenUrl.indexOf('/screens/now-playing') === 0;
+    document.body.classList.toggle('np-open', onNp);
+    /* drive the lyrics layout off what the server actually rendered, so a
+       re-render on track change (which re-requests ?lyrics=1) cannot leave the
+       body class and the deck disagreeing */
+    var lyBtn = onNp ? document.getElementById('np-lyrics') : null;
+    document.body.classList.toggle('np-lyrics-on', !!(lyBtn && lyBtn.classList.contains('on')));
+    poetSyncRail(poetScreenUrl);
     /* Sync the shown-track marker with what was actually rendered. Resetting
        it to -1 here made every poll re-fetch the whole Now Playing screen
        once a second — a permanent full-screen flicker. */
@@ -120,6 +136,83 @@ document.body.addEventListener('htmx:afterSwap', function (e) {
     window.scrollTo(0, 0);
   }
 });
+
+/* ---- keyboard shortcuts (§4) ----
+   Pointer/keyboard hardware means tablets with keyboards and the eventual
+   desktop build. Every binding posts to the same endpoints the buttons use, so
+   there is no second code path for playback control. Ignored while typing, and
+   Escape always falls through to poetBack() so it closes overlays in the same
+   order the hardware back button does. */
+document.addEventListener('keydown', function (e) {
+  var t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  var post = function (path) { htmx.ajax('POST', path, { swap: 'none' }); };
+  /* there is no relative-seek endpoint; /api/player/seek takes an absolute
+     position, so nudge the last polled position and clamp to the track */
+  var nudge = function (deltaMs) {
+    var st = poetLastState;
+    if (!st || !(st.dur > 0)) return;
+    var pos = Math.max(0, Math.min(st.dur, (st.pos || 0) + deltaMs));
+    post('/api/player/seek?pos=' + Math.round(pos));
+  };
+  switch (e.key) {
+    case ' ':
+    case 'k': post('/api/player/toggle'); break;
+    case 'ArrowRight': nudge(10000); break;
+    case 'ArrowLeft': nudge(-10000); break;
+    case 'n': post('/api/player/next'); break;
+    case 'p': post('/api/player/prev'); break;
+    case 'Escape': poetBack(); break;
+    default: return;
+  }
+  e.preventDefault();
+});
+
+/* True only in the base tier, where drawers and sheets are genuinely bottom
+   sheets. Mirrors the breakpoints at the foot of poet.css — keep in step. */
+function poetBottomSheet() {
+  return !window.matchMedia('(max-height: 500px)').matches &&
+         !window.matchMedia('(min-width: 700px)').matches;
+}
+
+/* Nav rail active state. The rail is the landscape/tablet/desktop counterpart
+   of the header pills, so it has to follow the same screen path the pills do.
+   Library tabs carry ?tab=…; everything else matches on the path alone. */
+function poetSyncRail(path) {
+  var items = document.querySelectorAll('#rail .rail-item');
+  if (!items.length) return;
+  var key = '';
+  /* the rendered screen is the truth: the library persists its tab server-side,
+     so the path is not always carrying ?tab= even when a tab is selected */
+  var lib = document.querySelector('#main-container [data-screen="library"]');
+  if (lib) key = lib.getAttribute('data-tab') || 'songs';
+  else if (path.indexOf('/screens/favorites') === 0) key = 'favorites';
+  else if (path.indexOf('/screens/journal') === 0) key = 'journal';
+  else if (path.indexOf('/screens/about') === 0) key = 'about';
+  else if (path.indexOf('/screens/settings') === 0) key = 'settings';
+  items.forEach(function (b) {
+    b.classList.toggle('on', b.getAttribute('data-rail') === key);
+  });
+}
+
+/* Lyrics toggle (§1.3). Lives here rather than in an inline <script> on the
+   Now Playing screen: it drives layout classes now, and a function redeclared
+   on every screen swap is a footgun. The body class does the work — the deck
+   grows into the space the cover art gives up, and the deck is the only
+   scroller on the screen. */
+function poetToggleLyrics(btn) {
+  var deck = document.getElementById('lyrics-deck');
+  if (!deck) return;
+  var opening = deck.innerHTML.trim() === '';
+  if (opening) {
+    htmx.ajax('GET', '/api/player/lyrics', { target: deck, swap: 'innerHTML' });
+  } else {
+    deck.innerHTML = '';
+  }
+  btn.classList.toggle('on', opening);
+  document.body.classList.toggle('np-lyrics-on', opening);
+}
 
 /* ---- multi-select + options drawer ----
    Tap a row plays it; long-press (or right-click) enters multi-select, where
@@ -226,7 +319,7 @@ function poetSleepSetCustom() {
   closeSheet();
 }
 
-/* delegated row interaction: menu button, play, or select-toggle */
+/* delegated row interaction: drawer button, play, or select-toggle */
 document.addEventListener('click', function (e) {
   var menuBtn = e.target.closest('.row-menu-btn');
   if (menuBtn) {
@@ -241,34 +334,59 @@ document.addEventListener('click', function (e) {
   else { fetch(row.getAttribute('data-play-url'), { method: 'POST' }).catch(function () {}); }
 });
 
-/* long-press (touch) and right-click (pointer) enter multi-select */
+/* A 300 ms press on a row enters multi-select. One pointer path covers both
+   input kinds, so a mouse-held row behaves like a held finger — the desktop
+   build has no ⋯ button to fall back on, and neither does the phone now. */
 (function () {
+  var LONG_PRESS_MS = 300;
   var timer = null, fired = false, startX = 0, startY = 0;
-  document.addEventListener('touchstart', function (e) {
+  var disarm = function () { if (timer) { clearTimeout(timer); timer = null; } };
+
+  document.addEventListener('pointerdown', function (e) {
+    poetLastPointerType = e.pointerType || 'mouse';
+    /* secondary buttons are the drawer's gesture (see contextmenu below) */
+    if (e.button !== 0) return;
     var row = e.target.closest('.row[data-play-url]');
     if (!row || e.target.closest('.row-menu-btn')) return;
     fired = false;
-    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    startX = e.clientX; startY = e.clientY;
     timer = setTimeout(function () {
+      timer = null;
       fired = true;
       if (navigator.vibrate) navigator.vibrate(15);
       poetEnterSelect(Number(row.getAttribute('data-track-id')));
-    }, 420);
-  }, { passive: true });
-  document.addEventListener('touchmove', function (e) {
+    }, LONG_PRESS_MS);
+  });
+  document.addEventListener('pointermove', function (e) {
     if (!timer) return;
-    var dx = e.touches[0].clientX - startX, dy = e.touches[0].clientY - startY;
-    if (dx * dx + dy * dy > 100) { clearTimeout(timer); timer = null; }
-  }, { passive: true });
-  document.addEventListener('touchend', function (e) {
-    if (timer) { clearTimeout(timer); timer = null; }
-    if (fired) { e.preventDefault(); fired = false; }
-  }, { passive: false });
-  document.addEventListener('touchcancel', function () { if (timer) { clearTimeout(timer); timer = null; } });
+    /* a drag is a scroll, not a press */
+    var dx = e.clientX - startX, dy = e.clientY - startY;
+    if (dx * dx + dy * dy > 100) disarm();
+  });
+  document.addEventListener('pointerup', disarm);
+  document.addEventListener('pointercancel', function () { disarm(); fired = false; });
+
+  /* The press already entered select mode; swallow the click the release is
+     about to produce, or it would immediately toggle the row back off. */
+  document.addEventListener('click', function (e) {
+    if (!fired) return;
+    fired = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
 })();
+
+/* Right-click opens the row's options drawer.
+   Touch is excluded on purpose: a WebView also fires contextmenu at the end of
+   a long press, which the block above has already turned into multi-select, so
+   acting on it here would open the drawer over the selection. */
+var poetLastPointerType = 'mouse';
 document.addEventListener('contextmenu', function (e) {
-  var row = e.target.closest('.row[data-play-url]');
-  if (row) { e.preventDefault(); poetEnterSelect(Number(row.getAttribute('data-track-id'))); }
+  var row = e.target.closest('.row[data-drawer-url]');
+  if (!row) return;
+  e.preventDefault();
+  if (poetLastPointerType === 'touch') return;
+  poetOpenDrawer(row.getAttribute('data-drawer-url'));
 });
 
 /* ---- bottom drawers: swipe down to close ----
@@ -278,6 +396,11 @@ document.addEventListener('contextmenu', function (e) {
 (function () {
   var panel = null, startY = 0, dy = 0, dragging = false;
   document.addEventListener('touchstart', function (e) {
+    /* Only bottom sheets can be swiped down. From the landscape breakpoint up
+       the same elements are side sheets or centred dialogs, and the drag would
+       write translate(-50%,Ypx) over their own centring transform — flinging
+       them sideways instead of dismissing them. */
+    if (!poetBottomSheet()) { panel = null; return; }
     panel = e.target.closest('#sheet-root .drawer, #sheet-root .sheet');
     if (!panel || e.target.closest('input, textarea')) { panel = null; return; }
     startY = e.touches[0].clientY; dy = 0; dragging = false;
