@@ -222,6 +222,7 @@ class MainActivity : AppCompatActivity() {
                 name.endsWith(".js") -> "application/javascript"
                 name.endsWith(".woff2") -> "font/woff2"
                 name.endsWith(".css") -> "text/css"
+                name.endsWith(".svg") -> "image/svg+xml"
                 else -> "application/octet-stream"
             }
             return try {

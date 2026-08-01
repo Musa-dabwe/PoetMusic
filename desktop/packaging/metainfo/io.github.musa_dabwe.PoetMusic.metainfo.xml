@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metadata — what GNOME Software, KDE Discover and Pop!_Shop read to
+  describe the app. Without it a software centre has only the Debian control
+  file to go on and captions the app "<package> Developers", which is where the
+  wrong author line came from.
+
+  Shipped inside the package at /opt/poet-music/lib/app/ and linked into
+  /usr/share/metainfo/ by the postinst script; jpackage on JDK 17 has no way to
+  place a file in a system directory directly. The file name, the <id> and the
+  path in postinst/postrm are one constant in three places — change all three.
+-->
+<component type="desktop-application">
+  <id>io.github.musa_dabwe.PoetMusic</id>
+
+  <name>Poet Music</name>
+  <summary>Offline-first, pastel-themed music player</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+
+  <developer id="io.github.musa_dabwe">
+    <name>Musa-dabwe</name>
+  </developer>
+  <!-- Pre-1.0 AppStream readers ignore <developer>; this is the old spelling. -->
+  <developer_name>Musa-dabwe</developer_name>
+
+  <description>
+    <p>
+      Poet Music plays the music that is already on your disk. There is no
+      account, no catalogue and no sign-in: you point it at a folder, it reads
+      the tags, cover art and .lrc lyric files it finds there, and that is your
+      library.
+    </p>
+    <p>
+      Browsing is by song, album, artist, genre or playlist, with live search
+      and a sort order that is remembered between sessions. Now Playing carries
+      a seek bar, synced lyrics, a ten-band equaliser, playback-speed steps and
+      a sleep timer that can end on a clock or after a set number of songs.
+    </p>
+    <p>
+      The queue is a working copy rather than an engine setting: shuffling
+      writes a new fixed order around the song currently playing, un-shuffling
+      puts the original order back, and "play next" inserts directly after the
+      current track. The queue, position and modes survive a restart.
+    </p>
+    <p>Also included:</p>
+    <ul>
+      <li>A tag editor that writes to MP3, FLAC, OGG and M4A, including
+      embedded artwork and lyrics, with a synced-LRC maker that stamps
+      timestamps against live playback.</li>
+      <li>A Listening Journal reporting on your own archive — totals, top
+      artists and albums, listening habits and library health.</li>
+      <li>Desktop media controls over MPRIS, so the panel applet and the
+      keyboard media keys drive playback.</li>
+      <li>Pastel accent colours and canvas tints, in light and dark.</li>
+    </ul>
+    <p>
+      Playback is the system's GStreamer, so it uses the codecs already
+      installed. The interface is a WebKitGTK view in a GTK window over a
+      server bound to the loopback address only. Nothing is sent anywhere.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">poet-music-poet-music.desktop</launchable>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>player</keyword>
+    <keyword>audio</keyword>
+    <keyword>offline</keyword>
+    <keyword>tags</keyword>
+    <keyword>lyrics</keyword>
+  </keywords>
+
+  <url type="homepage">https://github.com/Musa-dabwe/PoetMusic</url>
+  <url type="bugtracker">https://github.com/Musa-dabwe/PoetMusic/issues</url>
+  <url type="vcs-browser">https://github.com/Musa-dabwe/PoetMusic</url>
+
+  <provides>
+    <binary>poet-music</binary>
+  </provides>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="1.1" date="2026-08-01">
+      <description>
+        <p>
+          Desktop media controls over MPRIS, uninstalling now stops playback,
+          and a redrawn navigation rail.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>

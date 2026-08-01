@@ -1,0 +1,94 @@
+#!/bin/sh
+# prerm script for APPLICATION_PACKAGE
+#
+# see: dh_installdeb(1)
+#
+# Overrides jpackage's stock template (--resource-dir in desktop/build.gradle.kts).
+# The upstream version only unregisters the desktop entry; the stopping is ours.
+# The bare upper-case words below are jpackage substitution tokens, filled in at
+# package time — they are the same ones the stock template uses, and they are
+# replaced anywhere in the file, comments included.
+
+set -e
+
+# summary of how this script can be called:
+#        * <prerm> `remove'
+#        * <old-prerm> `upgrade' <new-version>
+#        * <new-prerm> `failed-upgrade' <old-version>
+#        * <conflictor's-prerm> `remove' `in-favour' <package> <new-version>
+#        * <deconfigured's-prerm> `deconfigure' `in-favour'
+#          <package-being-installed> <version> `removing'
+#          <conflicting-package> <version>
+# for details, see https://www.debian.org/doc/debian-policy/ or
+# the debian-policy package
+
+
+UTILITY_SCRIPTS
+
+# Where dpkg is about to delete the app from. Kept in step with jpackage's
+# default Linux install root, which is /opt/<package>.
+POET_INSTALL_DIR=/opt/APPLICATION_PACKAGE
+
+#
+# PIDs of every process running out of the installation directory.
+#
+# /proc rather than pgrep: procps is not Essential, and Debian policy says a
+# maintainer script may not assume a package it has not declared. /proc/PID/exe
+# is the honest identity — it survives an argv the app rewrote, and it will not
+# match somebody's text editor that happens to have the word poet-music in its
+# command line.
+#
+poet_pids() {
+    for proc in /proc/[0-9]*; do
+        exe=$(readlink "$proc/exe" 2>/dev/null) || continue
+        case "$exe" in
+            "$POET_INSTALL_DIR"/*) echo "${proc#/proc/}" ;;
+        esac
+    done
+}
+
+#
+# Removing the package does not stop the copy already running: dpkg unlinks the
+# files, the process keeps its own inodes open, and the music carries on playing
+# with no window left to stop it from. So ask it to quit first.
+#
+# SIGTERM runs the JVM shutdown hook, which persists the queue and position and
+# tears down the GStreamer pipeline — the same path as closing the window. Five
+# seconds is generous for that; past it, nothing is worth leaving audio playing
+# against a half-deleted install, so insist.
+#
+poet_stop_running() {
+    pids=$(poet_pids)
+    [ -n "$pids" ] || return 0
+
+    echo "Stopping APPLICATION_PACKAGE before removing it."
+    kill $pids 2>/dev/null || true
+
+    waited=0
+    while [ "$waited" -lt 50 ]; do
+        [ -n "$(poet_pids)" ] || return 0
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+
+    pids=$(poet_pids)
+    [ -n "$pids" ] || return 0
+    kill -KILL $pids 2>/dev/null || true
+}
+
+case "$1" in
+    remove|upgrade|deconfigure)
+poet_stop_running
+DESKTOP_COMMANDS_UNINSTALL
+    ;;
+
+    failed-upgrade)
+    ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+exit 0

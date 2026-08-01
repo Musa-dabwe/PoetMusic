@@ -128,6 +128,68 @@ class GstPlayer(private val store: LibraryStore) : PlayerPort {
     /** The equalizer element, for [GstEq]; null when the plugin is absent. */
     val equalizer: Element? get() = eq
 
+    // ---------- desktop-only controls ----------
+    //
+    // MPRIS exposes a few things the phone's UI has no button for, so they are
+    // not on PlayerPort: a volume slider (Android defers to the system stream
+    // volume), and *setting* a repeat/shuffle/rate value rather than cycling to
+    // the next one, because a D-Bus client writes the value it wants.
+
+    /** Playbin's own volume, 0.0 to 1.0 — the range MPRIS uses. */
+    var volume: Double
+        get() = runCatching { (bin.get("volume") as Double).coerceIn(0.0, 1.0) }.getOrDefault(1.0)
+        set(value) {
+            runCatching { bin.set("volume", value.coerceIn(0.0, 1.0)) }
+        }
+
+    fun setRepeatMode(code: Int) = ops.execute {
+        if (code in PlayModes.REPEAT_ONE..PlayModes.REPEAT_ONE_STOP) {
+            repeatMode = code
+            refreshSnapshot()
+        }
+    }
+
+    fun setShuffleMode(code: Int) = ops.execute {
+        applyShuffleMode(code)
+        refreshSnapshot()
+    }
+
+    /** Snap to the nearest speed [PlayModes.SPEED_STEPS] offers and apply it. */
+    fun setSpeedNearest(requested: Float) = ops.execute {
+        speed = PlayModes.SPEED_STEPS.minByOrNull { kotlin.math.abs(it - requested) } ?: 1f
+        applySpeed()
+        refreshSnapshot()
+    }
+
+    /** Stop playback outright, as MPRIS `Stop` means it: paused back at zero. */
+    fun stop() = ops.execute {
+        if (queue.isEmpty()) return@execute
+        wantPlaying = false
+        bin.pause()
+        runCatching { bin.seek(0, TimeUnit.MILLISECONDS) }
+        refreshSnapshot()
+    }
+
+    /** Start playing without toggling, for MPRIS `Play`. */
+    fun play() = ops.execute {
+        if (queue.isEmpty() || bin.state == State.PLAYING) return@execute
+        wantPlaying = true
+        bin.play()
+        refreshSnapshot()
+    }
+
+    /** Pause without toggling, for MPRIS `Pause`. */
+    fun pauseOnly() = ops.execute {
+        if (queue.isNotEmpty() && bin.state == State.PLAYING) pause()
+    }
+
+    /** Step [offsetMs] from where we are now, clamped to the track. */
+    fun seekBy(offsetMs: Long) = ops.execute {
+        val pos = runCatching { bin.queryPosition(TimeUnit.MILLISECONDS) }.getOrDefault(0L)
+        runCatching { bin.seek((pos + offsetMs).coerceAtLeast(0), TimeUnit.MILLISECONDS) }
+        refreshSnapshot()
+    }
+
     // ---------- periodic refresh ----------
 
     private fun tick() {

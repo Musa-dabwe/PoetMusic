@@ -28,11 +28,13 @@ object Shell {
     /**
      * One nav-rail entry. [key] is matched against the current screen path by
      * poetSyncRail() in poet.js to drive the active state, so it must stay in
-     * step with the `tab=` values the library screen understands.
+     * step with the `tab=` values the library screen understands. It also names
+     * the icon: `.ri-$key` in poet.css masks assets/web/icon-$key.svg, so the
+     * artwork tints itself from --ink and follows the theme.
      */
-    private fun railItem(key: String, glyph: String, label: String, path: String): String =
+    private fun railItem(key: String, label: String, path: String): String =
         """<button class="rail-item" data-rail="$key" title="$label" aria-label="$label"
-                   hx-get="$path" hx-target="#main-container"><span class="ri-ico">$glyph</span><span class="ri-txt">$label</span></button>"""
+                   hx-get="$path" hx-target="#main-container"><span class="ri-ico ri-$key"></span><span class="ri-txt">$label</span></button>"""
 
     fun page(accent: String, theme: String, folderCount: Int, dark: Boolean): String {
         val bg = CANVAS_TINTS[theme] ?: CANVAS_TINTS.getValue("Lavender")
@@ -97,17 +99,17 @@ object Shell {
       <div class="hdr-name">Poet</div>
     </div>
     <div class="rail-sec">Library</div>
-    ${railItem("songs", "♪", "Songs", "/screens/library?tab=songs")}
-    ${railItem("albums", "▣", "Albums", "/screens/library?tab=albums")}
-    ${railItem("artists", "☻", "Artists", "/screens/library?tab=artists")}
-    ${railItem("genres", "◈", "Genres", "/screens/library?tab=genres")}
-    ${railItem("playlists", "≡", "Playlists", "/screens/library?tab=playlists")}
+    ${railItem("songs", "Songs", "/screens/library?tab=songs")}
+    ${railItem("albums", "Albums", "/screens/library?tab=albums")}
+    ${railItem("artists", "Artists", "/screens/library?tab=artists")}
+    ${railItem("genres", "Genres", "/screens/library?tab=genres")}
+    ${railItem("playlists", "Playlists", "/screens/library?tab=playlists")}
     <div class="rail-sec">Collection</div>
-    ${railItem("favorites", "♥", "Favourites", "/screens/favorites")}
-    ${railItem("journal", "◐", "Journal", "/screens/journal")}
-    ${railItem("about", "◇", "About", "/screens/about")}
+    ${railItem("favorites", "Favourites", "/screens/favorites")}
+    ${railItem("journal", "Journal", "/screens/journal")}
+    ${railItem("about", "About", "/screens/about")}
     <div class="rail-spacer"></div>
-    ${railItem("settings", "⚙", "Settings", "/screens/settings")}
+    ${railItem("settings", "Settings", "/screens/settings")}
   </nav>
 
   <div id="shell">

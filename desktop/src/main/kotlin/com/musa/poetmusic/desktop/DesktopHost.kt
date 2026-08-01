@@ -87,11 +87,16 @@ class DesktopHost(
     }.getOrNull()
 
     /**
-     * Nothing outside the window reflects library state yet. MPRIS, which would
-     * give the desktop applets something to update, is follow-up work
-     * (docs/desktop-app-plan.md §6).
+     * Told when something outside the window needs re-reading — which on Linux
+     * means the MPRIS metadata a desktop applet is showing, so a tag edit
+     * reaches the panel without waiting for the next song. Set by `main` once
+     * the session bus is up; left null when there is none.
      */
-    override fun onLibraryChanged() = Unit
+    var onLibraryChangedHook: (() -> Unit)? = null
+
+    override fun onLibraryChanged() {
+        onLibraryChangedHook?.invoke()
+    }
 
     // ---------- listening journal portrait ----------
 

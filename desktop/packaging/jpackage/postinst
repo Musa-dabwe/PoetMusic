@@ -1,0 +1,60 @@
+#!/bin/sh
+# postinst script for APPLICATION_PACKAGE
+#
+# see: dh_installdeb(1)
+#
+# Overrides jpackage's stock template (--resource-dir in desktop/build.gradle.kts).
+# The stock version only registers the desktop entry; the metainfo step is ours.
+# The bare upper-case words below are jpackage substitution tokens, filled in at
+# package time — they are replaced anywhere in the file, comments included.
+
+set -e
+
+# summary of how this script can be called:
+#        * <postinst> `configure' <most-recently-configured-version>
+#        * <old-postinst> `abort-upgrade' <new version>
+#        * <conflictor's-postinst> `abort-remove' `in-favour' <package>
+#          <new-version>
+#        * <postinst> `abort-remove'
+#        * <deconfigured's-postinst> `abort-deconfigure' `in-favour'
+#          <failed-install-package> <version> `removing'
+#          <conflicting-package> <version>
+# for details, see https://www.debian.org/doc/debian-policy/ or
+# the debian-policy package
+
+# See desktop/packaging/metainfo/ for why this file exists and what reads it.
+# jpackage on JDK 17 can only put files under the app directory, so the package
+# carries it there and the link into the system directory is made here.
+POET_METAINFO=io.github.musa_dabwe.PoetMusic.metainfo.xml
+POET_METAINFO_SRC=/opt/APPLICATION_PACKAGE/lib/app/$POET_METAINFO
+POET_METAINFO_DST=/usr/share/metainfo/$POET_METAINFO
+
+poet_install_metainfo() {
+    [ -f "$POET_METAINFO_SRC" ] || return 0
+    mkdir -p /usr/share/metainfo
+    # Copied, not symlinked: appstreamcli follows the file's own path when it
+    # resolves relative icon and launchable references.
+    cp -f "$POET_METAINFO_SRC" "$POET_METAINFO_DST"
+    # Best effort — a machine with no software centre has no cache to refresh,
+    # and a refresh failing is not a reason to fail the install.
+    if command -v appstreamcli >/dev/null 2>&1; then
+        appstreamcli refresh-cache --force >/dev/null 2>&1 || true
+    fi
+}
+
+case "$1" in
+    configure)
+DESKTOP_COMMANDS_INSTALL
+poet_install_metainfo
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+exit 0
