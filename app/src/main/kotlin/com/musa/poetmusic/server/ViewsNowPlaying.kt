@@ -101,11 +101,11 @@ object NowPlayingViews {
             <div style="display:flex; align-items:center; gap:18px; margin-top:18px;">
               ${shuffleButton(s.shuffleMode)}
               <button class="np-side" hx-post="/api/player/prev" hx-swap="none">
-                <svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="#3b3651"></rect><polygon points="18,0 6,7 18,14" fill="#3b3651"></polygon></svg>
+                <svg width="18" height="14" viewBox="0 0 18 14"><rect x="0" y="0" width="3" height="14" fill="currentColor"></rect><polygon points="18,0 6,7 18,14" fill="currentColor"></polygon></svg>
               </button>
               <button id="np-play" class="np-main" hx-post="/api/player/toggle" hx-swap="none"></button>
               <button class="np-side" hx-post="/api/player/next" hx-swap="none">
-                <svg width="18" height="14" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="#3b3651"></polygon><rect x="15" y="0" width="3" height="14" fill="#3b3651"></rect></svg>
+                <svg width="18" height="14" viewBox="0 0 18 14"><polygon points="0,0 12,7 0,14" fill="currentColor"></polygon><rect x="15" y="0" width="3" height="14" fill="currentColor"></rect></svg>
               </button>
               ${repeatButton(s.repeatMode)}
             </div>

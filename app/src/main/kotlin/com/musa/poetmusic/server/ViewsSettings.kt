@@ -137,7 +137,7 @@ object SettingsViews {
         </div>"""
 
         val presets = EqPresets.NAMES.joinToString("") { name ->
-            """<button type="button" class="tint-pill${if (name == s.preset) " on" else ""}"
+            """<button type="button" class="chip${if (name == s.preset) " on" else ""}"
                     hx-post="/api/eq/preset?name=${enc(name)}" hx-target="#eq-card" hx-swap="innerHTML">$name</button>"""
         }
 
@@ -210,7 +210,7 @@ object SettingsViews {
         val current = PlayerController.readPrevRestartMs(db)
         return PREV_THRESHOLDS.joinToString("") { (sec, label) ->
             val on = sec * 1000L == current
-            """<button type="button" class="tint-pill${if (on) " on" else ""}"
+            """<button type="button" class="chip${if (on) " on" else ""}"
                     hx-post="/api/settings/prev-restart?sec=$sec"
                     hx-target="#main-container" hx-swap="innerHTML">$label</button>"""
         }
@@ -307,7 +307,7 @@ Copyright © 2026 Fackson Musadabwe Mutetesha. Licensed under the Apache License
         val auto = LibraryScanner.autoScanEnabled(db)
         val intervals = LibraryScanner.INTERVAL_CHOICES.joinToString("") { h ->
             val on = h == LibraryScanner.intervalHours(db)
-            """<button type="button" class="tint-pill${if (on) " on" else ""}"
+            """<button type="button" class="chip${if (on) " on" else ""}"
                     hx-post="/api/library/scan-interval?h=$h" hx-target="#scan-card" hx-swap="innerHTML">${h}h</button>"""
         }
         val autoBlock = """
