@@ -14,7 +14,8 @@ import android.database.sqlite.SQLiteOpenHelper
  * pages are returned to the OS via incremental auto-vacuum, keeping the
  * on-disk footprint tight.
  */
-class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 4) {
+class MusicDatabase(context: Context) :
+    SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 4), LibraryStore {
 
     init {
         setWriteAheadLoggingEnabled(true)
@@ -140,25 +141,25 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
 
     // ---------- settings ----------
 
-    fun getSetting(key: String, default: String): String {
+    override fun getSetting(key: String, default: String): String {
         readableDatabase.rawQuery("SELECT value FROM settings WHERE key=?", arrayOf(key)).use { c ->
             return if (c.moveToFirst()) c.getString(0) else default
         }
     }
 
-    fun setSetting(key: String, value: String) {
+    override fun setSetting(key: String, value: String) {
         val cv = ContentValues().apply { put("key", key); put("value", value) }
         writableDatabase.insertWithOnConflict("settings", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     // ---------- folders ----------
 
-    fun addFolder(treeUri: String, displayPath: String): Long {
+    override fun addFolder(treeUri: String, displayPath: String): Long {
         val cv = ContentValues().apply { put("tree_uri", treeUri); put("display_path", displayPath) }
         return writableDatabase.insertWithOnConflict("folders", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
-    fun removeFolder(id: Long) {
+    override fun removeFolder(id: Long) {
         val db = writableDatabase
         transaction(db) {
             db.delete("tracks", "folder_id=?", arrayOf(id.toString()))
@@ -167,7 +168,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    fun folders(): List<MusicFolder> {
+    override fun folders(): List<MusicFolder> {
         val out = mutableListOf<MusicFolder>()
         readableDatabase.rawQuery("SELECT id, tree_uri, display_path FROM folders ORDER BY id", null).use { c ->
             while (c.moveToNext()) out += MusicFolder(c.getLong(0), c.getString(1), c.getString(2))
@@ -177,7 +178,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
 
     // ---------- tracks ----------
 
-    fun upsertTrack(
+    override fun upsertTrack(
         uri: String, parentUri: String, displayName: String, title: String, artist: String,
         album: String, durationMs: Long, trackNo: Int, genre: String, year: String,
         albumArtist: String, discNo: Int, composer: String,
@@ -204,7 +205,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    fun deleteMissingInFolder(folderId: Long, seenUris: Set<String>) {
+    override fun deleteMissingInFolder(folderId: Long, seenUris: Set<String>) {
         val db = writableDatabase
         transaction(db) {
             val stale = mutableListOf<Long>()
@@ -261,7 +262,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
      * library; a non-negative limit windows the read so the songs tab can
      * render one page at a time instead of every row on every keystroke.
      */
-    fun tracks(query: String = "", sort: String = "title", limit: Int = -1, offset: Int = 0): List<Track> {
+    override fun tracks(query: String, sort: String, limit: Int, offset: Int): List<Track> {
         val out = mutableListOf<Track>()
         val (where, args) = trackFilter(query)
         val window = if (limit >= 0) " LIMIT $limit OFFSET ${offset.coerceAtLeast(0)}" else ""
@@ -274,21 +275,21 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     }
 
     /** How many songs [query] matches — the total behind a windowed read. */
-    fun trackCount(query: String): Int {
+    override fun trackCount(query: String): Int {
         val (where, args) = trackFilter(query)
         readableDatabase.rawQuery("SELECT COUNT(*) FROM tracks $where", args).use { c ->
             return if (c.moveToFirst()) c.getInt(0) else 0
         }
     }
 
-    fun track(id: Long): Track? {
+    override fun track(id: Long): Track? {
         readableDatabase.rawQuery("SELECT $trackCols FROM tracks WHERE id=?", arrayOf(id.toString())).use { c ->
             return if (c.moveToFirst()) trackFrom(c) else null
         }
     }
 
     /** Tracks looked up by id, returned in the order of [ids]; missing ids are skipped. */
-    fun tracksByIds(ids: List<Long>): List<Track> {
+    override fun tracksByIds(ids: List<Long>): List<Track> {
         if (ids.isEmpty()) return emptyList()
         val byId = HashMap<Long, Track>(ids.size)
         ids.chunked(500).forEach { chunk ->
@@ -301,7 +302,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return ids.mapNotNull { byId[it] }
     }
 
-    fun tracksForAlbum(album: String, artist: String): List<Track> {
+    override fun tracksForAlbum(album: String, artist: String): List<Track> {
         val out = mutableListOf<Track>()
         readableDatabase.rawQuery(
             "SELECT $trackCols FROM tracks WHERE album=? AND artist=? ORDER BY track_no, title COLLATE NOCASE",
@@ -310,7 +311,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return out
     }
 
-    fun tracksForArtist(artist: String): List<Track> {
+    override fun tracksForArtist(artist: String): List<Track> {
         val out = mutableListOf<Track>()
         readableDatabase.rawQuery(
             "SELECT $trackCols FROM tracks WHERE artist=? ORDER BY album COLLATE NOCASE, track_no, title COLLATE NOCASE",
@@ -319,7 +320,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return out
     }
 
-    fun favorites(): List<Track> {
+    override fun favorites(): List<Track> {
         val out = mutableListOf<Track>()
         readableDatabase.rawQuery(
             "SELECT $trackCols FROM tracks WHERE favorite=1 ORDER BY title COLLATE NOCASE", null
@@ -327,11 +328,11 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return out
     }
 
-    fun setFavorite(id: Long, fav: Boolean) {
+    override fun setFavorite(id: Long, fav: Boolean) {
         writableDatabase.execSQL("UPDATE tracks SET favorite=? WHERE id=?", arrayOf(if (fav) 1 else 0, id))
     }
 
-    fun updateTags(
+    override fun updateTags(
         id: Long, title: String, artist: String, album: String, genre: String, year: String,
         trackNo: Int, albumArtist: String, discNo: Int, composer: String, comment: String
     ) {
@@ -350,9 +351,9 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
      * alone", so a batch that only sets the artist can't blank out every other
      * field of the selected tracks.
      */
-    fun updatePartialTags(
-        id: Long, title: String? = null, artist: String? = null, album: String? = null,
-        genre: String? = null, year: String? = null, trackNo: Int? = null, albumArtist: String? = null
+    override fun updatePartialTags(
+        id: Long, title: String?, artist: String?, album: String?,
+        genre: String?, year: String?, trackNo: Int?, albumArtist: String?
     ) {
         val cv = ContentValues().apply {
             title?.let { put("title", it) }
@@ -369,21 +370,21 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     }
 
     /** Points a track row at its new document after a physical file rename. */
-    fun updateTrackFile(id: Long, uri: String, displayName: String) {
+    override fun updateTrackFile(id: Long, uri: String, displayName: String) {
         val cv = ContentValues().apply { put("uri", uri); put("display_name", displayName) }
         writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
     }
 
-    fun updateLrcUri(id: Long, lrcUri: String?) {
+    override fun updateLrcUri(id: Long, lrcUri: String?) {
         val cv = ContentValues().apply { put("lrc_uri", lrcUri) }
         writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
     }
 
-    fun setHasArt(id: Long, hasArt: Boolean) {
+    override fun setHasArt(id: Long, hasArt: Boolean) {
         writableDatabase.execSQL("UPDATE tracks SET has_art=? WHERE id=?", arrayOf(if (hasArt) 1 else 0, id))
     }
 
-    fun removeTrack(id: Long) {
+    override fun removeTrack(id: Long) {
         val db = writableDatabase
         transaction(db) {
             db.delete("tracks", "id=?", arrayOf(id.toString()))
@@ -392,7 +393,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    fun trackCount(): Int {
+    override fun trackCount(): Int {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM tracks", null).use { c ->
             return if (c.moveToFirst()) c.getInt(0) else 0
         }
@@ -406,7 +407,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
      * four-digit year tagged on any of the album's tracks, so a compilation
      * with one mistagged file still sorts sensibly.
      */
-    fun albums(sort: String = "title"): List<AlbumRow> {
+    override fun albums(sort: String): List<AlbumRow> {
         val order = when (sort) {
             "artist" -> "artist COLLATE NOCASE, album COLLATE NOCASE"
             "year" -> "year DESC, album COLLATE NOCASE"
@@ -430,7 +431,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return out
     }
 
-    fun artists(sort: String = "name"): List<ArtistRow> {
+    override fun artists(sort: String): List<ArtistRow> {
         val order = if (sort == "tracks") "n DESC, artist COLLATE NOCASE" else "artist COLLATE NOCASE"
         val out = mutableListOf<ArtistRow>()
         readableDatabase.rawQuery(
@@ -441,7 +442,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     }
 
     /** Tagged genres with their track counts; untagged tracks are excluded. */
-    fun genres(sort: String = "name"): List<GenreRow> {
+    override fun genres(sort: String): List<GenreRow> {
         val order = if (sort == "tracks") "n DESC, genre COLLATE NOCASE" else "genre COLLATE NOCASE"
         val out = mutableListOf<GenreRow>()
         readableDatabase.rawQuery(
@@ -451,7 +452,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return out
     }
 
-    fun tracksForGenre(genre: String): List<Track> {
+    override fun tracksForGenre(genre: String): List<Track> {
         val out = mutableListOf<Track>()
         readableDatabase.rawQuery(
             """SELECT $trackCols FROM tracks WHERE genre=?
@@ -464,7 +465,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     // ---------- listening journal ----------
 
     /** Append one listen to the plays log (see PlayerController's play threshold). */
-    fun recordPlay(trackId: Long, playedAt: Long = System.currentTimeMillis()) {
+    override fun recordPlay(trackId: Long, playedAt: Long) {
         val cv = ContentValues().apply { put("track_id", trackId); put("played_at", playedAt) }
         writableDatabase.insert("plays", null, cv)
     }
@@ -474,7 +475,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
      * the heavy-rotation leaders. The "unknown" defaults the scanner writes for
      * untagged files count as missing tags, not as filled ones.
      */
-    fun journalStats(): JournalStats {
+    override fun journalStats(): JournalStats {
         val db = readableDatabase
         var trackCount = 0
         var totalDuration = 0L
@@ -657,17 +658,17 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
 
     // ---------- playlists ----------
 
-    fun createPlaylist(name: String): Long {
+    override fun createPlaylist(name: String): Long {
         val cv = ContentValues().apply { put("name", name); put("created_at", System.currentTimeMillis()) }
         return writableDatabase.insert("playlists", null, cv)
     }
 
-    fun renamePlaylist(id: Long, name: String) {
+    override fun renamePlaylist(id: Long, name: String) {
         val cv = ContentValues().apply { put("name", name) }
         writableDatabase.update("playlists", cv, "id=?", arrayOf(id.toString()))
     }
 
-    fun deletePlaylist(id: Long) {
+    override fun deletePlaylist(id: Long) {
         val db = writableDatabase
         transaction(db) {
             db.delete("playlist_tracks", "playlist_id=?", arrayOf(id.toString()))
@@ -675,7 +676,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    fun playlists(): List<Playlist> {
+    override fun playlists(): List<Playlist> {
         val out = mutableListOf<Playlist>()
         readableDatabase.rawQuery(
             """SELECT p.id, p.name, COUNT(pt.track_id) FROM playlists p
@@ -685,7 +686,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         return out
     }
 
-    fun playlist(id: Long): Playlist? {
+    override fun playlist(id: Long): Playlist? {
         readableDatabase.rawQuery(
             """SELECT p.id, p.name, COUNT(pt.track_id) FROM playlists p
                LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
@@ -693,7 +694,7 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         ).use { c -> return if (c.moveToFirst() && !c.isNull(0)) Playlist(c.getLong(0), c.getString(1), c.getInt(2)) else null }
     }
 
-    fun addToPlaylist(playlistId: Long, trackId: Long) {
+    override fun addToPlaylist(playlistId: Long, trackId: Long) {
         val db = writableDatabase
         transaction(db) {
             var next = 0
@@ -708,14 +709,14 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
         }
     }
 
-    fun removeFromPlaylist(playlistId: Long, trackId: Long) {
+    override fun removeFromPlaylist(playlistId: Long, trackId: Long) {
         writableDatabase.delete(
             "playlist_tracks", "playlist_id=? AND track_id=?",
             arrayOf(playlistId.toString(), trackId.toString())
         )
     }
 
-    fun playlistTracks(playlistId: Long): List<Track> {
+    override fun playlistTracks(playlistId: Long): List<Track> {
         val out = mutableListOf<Track>()
         readableDatabase.rawQuery(
             """SELECT ${trackCols.split(", ").joinToString(", ") { "t.$it" }}
@@ -726,17 +727,10 @@ class MusicDatabase(context: Context) : SQLiteOpenHelper(context.applicationCont
     }
 
     companion object {
-        /** Placeholders the scanner writes when a file carries no artist/album tag. */
-        const val UNKNOWN_ARTIST = "Unknown artist"
-        const val UNKNOWN_ALBUM = "Unknown album"
-
-        /**
-         * Tag fields the journal's integrity index scores per track: artist,
-         * album, genre, year, track number and album artist.
-         */
-        const val CORE_TAG_FIELDS = 6
-
-        /** How deep each journal leaderboard is read, and shown. */
-        const val JOURNAL_TOP_N = 10
+        /** Re-exported from :core so existing Android call sites read unchanged. */
+        const val UNKNOWN_ARTIST = com.musa.poetmusic.data.UNKNOWN_ARTIST
+        const val UNKNOWN_ALBUM = com.musa.poetmusic.data.UNKNOWN_ALBUM
+        const val CORE_TAG_FIELDS = com.musa.poetmusic.data.CORE_TAG_FIELDS
+        const val JOURNAL_TOP_N = com.musa.poetmusic.data.JOURNAL_TOP_N
     }
 }

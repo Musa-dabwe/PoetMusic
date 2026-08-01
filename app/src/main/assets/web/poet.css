@@ -77,8 +77,39 @@ button { font-family: inherit; color: var(--ink); }
 @keyframes poet-sheet-up { from { transform: translate(-50%,100%); } to { transform: translate(-50%,0); } }
 @keyframes poet-pop { 0% { transform: scale(0.7); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
 
-#app { width:100%; max-width:480px; min-height:100vh; margin:0 auto; position:relative; display:flex; flex-direction:column; }
-#main-container { flex:1; padding:6px 20px 130px 20px; }
+/* Responsive shell — docs/native-ui-solidification.md §3.
+   --shell-w is the one source of truth for the width cap that used to be
+   hard-coded as 480px on seven separate surfaces; --tray-h is the height the
+   fixed media tray occupies and --pad-b the room screens reserve for it.
+   The breakpoint block at the foot of this file moves all three together. */
+#app {
+  --shell-w:480px; --tray-h:68px; --pad-b:130px; --rail-w:0px;
+  width:100%; max-width:var(--shell-w); min-height:100vh; margin:0 auto;
+  position:relative; display:flex; flex-direction:column;
+  padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right);
+}
+/* wraps the header + screen container so the nav rail can sit beside them */
+#shell { flex:1; min-width:0; display:flex; flex-direction:column; }
+#main-container { flex:1; padding:6px 20px var(--pad-b) 20px; }
+
+/* nav rail — hidden in portrait, where the header owns navigation. Present in
+   the DOM at every size so CSS alone decides which chrome renders (§2.6). */
+#rail { display:none; flex-direction:column; gap:2px; flex:0 0 var(--rail-w);
+  padding:12px 8px calc(12px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+  border-right:1px solid var(--divider); background:var(--card-bg); z-index:40; }
+.rail-brand { display:flex; align-items:center; gap:10px; padding:4px 6px 14px; cursor:pointer; }
+.rail-brand .hdr-name { display:none; }
+.rail-sec { display:none; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+  color:var(--faint); padding:14px 10px 6px; }
+.rail-item { display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+  border:none; background:transparent; color:var(--ink); font-family:inherit;
+  font-size:13.5px; font-weight:600; cursor:pointer; padding:10px; border-radius:11px; }
+.rail-item .ri-ico { flex:0 0 20px; height:20px; display:flex; align-items:center; justify-content:center; opacity:0.8; font-size:15px; }
+.rail-item .ri-txt { display:none; white-space:nowrap; overflow:hidden; }
+.rail-item.on { background:var(--accent-faint); }
+.rail-item.on .ri-ico { opacity:1; }
+.rail-item:active { transform:scale(0.97); }
+.rail-spacer { flex:1; }
 .screen { animation: poet-fade 0.18s ease-out; }
 
 /* header */
@@ -115,9 +146,13 @@ button { font-family: inherit; color: var(--ink); }
 .row-main { flex:1; min-width:0; }
 .row-title { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .row-sub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.row-dur { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.row-dur { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; margin-left:auto; padding-left:16px; }
 .row-menu-btn { border:none; background:transparent; cursor:pointer; font-size:18px; color:var(--muted); padding:6px 8px; border-radius:8px; line-height:1; }
 .row-menu-btn:active { transform: scale(0.9); }
+/* With a mouse the drawer is a right-click, so the ⋯ affordance is redundant
+   and the row gets the width back. Touch devices keep it: a long press is
+   already spoken for by multi-select, and they have no second button. */
+@media (hover: hover) and (pointer: fine) { .row-menu-btn { display:none; } }
 
 /* multi-select: checkbox + selected state (toggled by body.select-mode) */
 .row-check { width:22px; height:22px; border-radius:7px; flex-shrink:0; border:2px solid var(--card-border-strong);
@@ -130,7 +165,7 @@ body.select-mode .row-menu-btn { display:none; }
 .row.selected .row-check svg { display:block; }
 
 /* contextual action bar (multi-select) */
-#cab { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; z-index:60;
+#cab { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); z-index:60;
   background:var(--panel-strong); padding:12px 14px calc(14px + env(safe-area-inset-bottom)) 14px;
   box-shadow:0 -8px 28px rgba(59,54,81,0.35); animation:poet-sheet-up 0.22s cubic-bezier(0.2,0.9,0.3,1); display:none; }
 body.select-mode #cab { display:block; }
@@ -147,7 +182,7 @@ body.select-mode #cab { display:block; }
 .cab-btn.solid { background:rgba(245,243,250,0.12); }
 
 /* options drawer */
-.drawer { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
+.drawer { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w);
   max-height:90vh; overflow-y:auto; overscroll-behavior:contain; z-index:71; background:var(--card-bg); border-radius:24px 24px 0 0;
   box-shadow:0 -12px 40px rgba(59,54,81,0.3); padding:12px 12px calc(20px + env(safe-area-inset-bottom)) 12px;
   animation:poet-sheet-up 0.26s cubic-bezier(0.2,0.9,0.3,1); }
@@ -228,7 +263,45 @@ body.select-mode #cab { display:block; }
 .album-art img { width:100%; height:100%; object-fit:cover; }
 
 /* now playing */
-.np-art { width:min(78vw,320px); aspect-ratio:1; border-radius:24px; box-shadow:0 16px 40px var(--accent-shadow); display:flex; align-items:center; justify-content:center; margin:0 auto 24px auto; overflow:hidden; }
+/* Now Playing fits the viewport instead of scrolling (§1). The screen is a
+   fixed-height flex column and the cover art is the elastic element: it
+   absorbs the slack and shrinks first, so the transport row and the chips are
+   never pushed below the fold. The old width:min(78vw,320px) forced the
+   opposite — a fixed square that grew the page until it scrolled. */
+body.np-open { overflow:hidden; }
+body.np-open #app { height:100vh; height:100dvh; min-height:0; }
+body.np-open #main-container { min-height:0; overflow:hidden; --pad-b:calc(10px + env(safe-area-inset-bottom)); }
+/* the tray duplicates the transport sitting right above it, and costs exactly
+   the height the art needs; the PC tier puts it back (§1.4) */
+body.np-open #app { --tray-h:0px; }
+body.np-open #tray { display:none; }
+
+.np-screen { display:flex; flex-direction:column; height:100%; min-height:0; }
+.np-grid { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; }
+.np-art { flex:1 1 auto; min-height:0; max-height:320px; width:auto; max-width:100%;
+  aspect-ratio:1; border-radius:24px; box-shadow:0 16px 40px var(--accent-shadow);
+  display:flex; align-items:center; justify-content:center; margin:0 auto 18px auto; overflow:hidden; }
+.np-mid { flex:0 0 auto; width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; }
+.np-title { font-size:22px; font-weight:700; letter-spacing:-0.02em; text-align:center; }
+.np-artist { font-size:14px; color:var(--muted); margin-top:4px; margin-bottom:18px; text-align:center; }
+.np-seek { width:100%; }
+.np-times { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; margin-top:4px; }
+.np-transport { display:flex; align-items:center; gap:18px; margin-top:16px; }
+/* one line, never wraps: a horizontal scroller is the last-resort fallback so
+   all five chips stay reachable without the page growing */
+.np-chips { flex:0 0 auto; display:flex; align-items:center; gap:8px; margin-top:18px;
+  width:100%; max-width:340px; justify-content:center; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+.np-chips::-webkit-scrollbar { display:none; }
+.np-chips > .chip { flex:0 0 auto; white-space:nowrap; }
+/* lyrics: the one place scrolling is allowed. Hidden until toggled, and the
+   art yields its height rather than the deck extending the page. */
+.np-lyrics { display:none; width:100%; flex:1 1 auto; min-height:0; margin-top:12px; }
+body.np-lyrics-on .np-lyrics { display:flex; }
+/* fixed, not flexible: with the deck also asking for the free space, a
+   shrinkable art loses the negotiation and collapses to a few pixels on
+   shorter phones. Pin it and let the deck take everything else. */
+body.np-lyrics-on .np-art { flex:0 0 auto; height:150px; max-height:150px; }
+.np-lyrics > #lyrics-deck { flex:1; min-height:0; display:flex; width:100%; }
 .np-art img { width:100%; height:100%; object-fit:cover; }
 .np-dot { border:none; cursor:pointer; width:44px; height:44px; border-radius:50%; background:var(--overlay-neutral); font-size:18px; display:flex; align-items:center; justify-content:center; color:var(--ink); }
 .np-dot:active { transform: scale(0.9); }
@@ -243,7 +316,7 @@ body.select-mode #cab { display:block; }
 input.seek { -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:3px; outline:none; border:none; cursor:pointer; }
 input.seek::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%; background:var(--ink); border:3px solid var(--card-bg); box-shadow:0 1px 4px rgba(59,54,81,0.35); }
 /* position:relative so each .lyric's offsetTop is deck-relative (auto-scroll math) */
-.lyrics-deck { position:relative; width:100%; max-width:340px; margin:16px auto 0 auto; background:var(--lyrics-glass); backdrop-filter:blur(8px); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; max-height:38vh; overflow-y:auto; overscroll-behavior:contain; }
+.lyrics-deck { position:relative; width:100%; max-width:340px; margin:0 auto; background:var(--lyrics-glass); backdrop-filter:blur(8px); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .lyric { font-size:13px; font-weight:500; color:var(--lyric-dim); transition: all 0.3s; }
 .lyric.active { font-size:16px; font-weight:700; color:var(--ink); }
 
@@ -367,7 +440,7 @@ body.journal-open #main-container { padding:0; }
 
 /* bottom sheets (sort drawer, tag editor) */
 .sheet-shield { position:fixed; inset:0; z-index:70; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); animation:poet-fade-in 0.2s ease; touch-action:none; }
-.sheet { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; z-index:71;
+.sheet { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); z-index:71;
   background:var(--card-bg); border-radius:24px 24px 0 0; box-shadow:0 -12px 40px rgba(59,54,81,0.25); margin:0;
   padding:12px 20px calc(24px + env(safe-area-inset-bottom)) 20px; animation:poet-sheet-up 0.25s cubic-bezier(0.2,0.9,0.3,1); }
 .sheet-tall { max-height:88vh; overflow-y:auto; overscroll-behavior:contain; }
@@ -411,7 +484,9 @@ body.journal-open #main-container { padding:0; }
 .art-viewer { position:fixed; inset:0; z-index:80; background:rgba(20,18,28,0.92); display:flex;
   flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:24px; touch-action:none;
   animation:poet-fade-in 0.18s ease; }
-.art-viewer-img { max-width:min(92vw, 520px); max-height:60vh; width:auto; height:auto; border-radius:20px;
+/* 60vh is a portrait assumption: in landscape it leaves the cover a letterbox
+   strip. Square-ish clamp off the smaller axis instead (§3.3 audit). */
+.art-viewer-img { max-width:min(92vw, 520px); max-height:min(60vh, 92vw); width:auto; height:auto; border-radius:20px;
   object-fit:contain; box-shadow:0 24px 60px rgba(0,0,0,0.55); cursor:pointer; }
 .art-viewer-meta { text-align:center; max-width:90vw; }
 .art-viewer-title { font-size:17px; font-weight:700; color:#f5f3fa; }
@@ -442,7 +517,7 @@ body.journal-open #main-container { padding:0; }
 .field input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-faint); }
 
 /* full-height tag editor sheet */
-.editor-sheet { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; height:92vh;
+.editor-sheet { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); height:92vh;
   z-index:71; background:var(--card-bg); border-radius:24px 24px 0 0; box-shadow:0 -12px 40px rgba(59,54,81,0.3);
   display:flex; flex-direction:column; animation:poet-sheet-up 0.28s cubic-bezier(0.2,0.9,0.3,1); }
 .ed-head { display:flex; align-items:center; gap:13px; padding:0 20px 14px 20px; flex-shrink:0; }
@@ -543,7 +618,7 @@ body.journal-open #main-container { padding:0; }
 .tip-body { background:var(--panel-strong); color:var(--panel-strong-text); border-radius:14px; padding:16px 18px; box-shadow:0 12px 32px rgba(59,54,81,0.35); }
 
 /* tray */
-#tray { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; z-index:35; background:var(--card-glass); backdrop-filter:blur(16px); border-top:1px solid var(--divider); padding:10px 16px calc(10px + env(safe-area-inset-bottom)) 16px; }
+#tray { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); z-index:35; background:var(--card-glass); backdrop-filter:blur(16px); border-top:1px solid var(--divider); padding:10px 16px calc(10px + env(safe-area-inset-bottom)) 16px; }
 #tray-progress { position:absolute; top:0; left:0; height:3px; background:var(--accent); width:0%; transition:width 0.4s linear; }
 .tray-inner { display:flex; align-items:center; gap:12px; }
 .tray-info { display:flex; align-items:center; gap:12px; flex:1; min-width:0; cursor:pointer; }
@@ -558,7 +633,7 @@ body.journal-open #main-container { padding:0; }
 @keyframes queue-up { from { transform:translate(-50%,100%); } to { transform:translate(-50%,0); } }
 @keyframes queue-eq { 0%,100% { height:5px; } 50% { height:15px; } }
 .queue-shield { position:fixed; inset:0; z-index:64; background:rgba(59,54,81,0.35); backdrop-filter:blur(2px); touch-action:none; }
-.queue-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; max-height:86vh; z-index:65;
+.queue-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); max-height:86vh; z-index:65;
   background:var(--bg); border-radius:22px 22px 0 0; box-shadow:0 -8px 32px rgba(59,54,81,0.25);
   padding:16px 16px calc(14px + env(safe-area-inset-bottom)) 16px; display:flex; flex-direction:column; animation: queue-up 0.22s ease-out; }
 #qp-body { overflow-y:auto; overscroll-behavior:contain; min-height:0; padding:2px 0 4px 0; }
@@ -639,3 +714,211 @@ body.journal-open #main-container { padding:0; }
 .md pre code { background:transparent; padding:0; font-size:12px; line-height:1.5; }
 .md blockquote { margin:0 0 12px 0; padding:8px 14px; border-left:3px solid var(--accent); background:var(--overlay-faint); border-radius:0 10px 10px 0; color:var(--muted); }
 .md hr { border:none; border-top:1px solid var(--divider); margin:18px 0; }
+
+/* ==========================================================================
+   BREAKPOINTS — docs/native-ui-solidification.md §3.3
+   --------------------------------------------------------------------------
+   Ported verbatim from docs/mockups/layout-modes.html, where the same rules
+   run as @container queries on a size-contained frame.
+
+     portrait mobile   base (no query)
+     landscape mobile  (max-height: 500px)
+     tablet            (min-width: 700px) and (min-height: 501px)
+     pc compact        (min-width: 1100px) and (min-height: 501px)
+     pc wide           (min-width: 1400px) and (min-height: 501px)
+
+   The min-height guards are load-bearing: an 800x360 landscape phone and an
+   834px tablet are indistinguishable on width alone, and a width-only set
+   hands the phone the tablet layout. The tiers accumulate mobile-first, so
+   every later tier must override what an earlier one set.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   LANDSCAPE MOBILE — the constraint is height, not width.
+   Header out, icon rail in, two-column lists, side sheets instead of bottom
+   sheets (a 90vh bottom sheet on a 360px-tall screen is unusable).
+   -------------------------------------------------------------------------- */
+@media (max-height: 500px) {
+  #app { --shell-w:100%; --rail-w:56px; --tray-h:54px; --pad-b:74px; max-width:none; flex-direction:row; }
+  .hdr { display:none; }
+  #rail { display:flex; }
+  /* About is a rail destination from here up, so Settings stops offering it
+     and the About screen stops offering a way back to Settings. */
+  .settings-about { display:none; }
+  [data-screen="about"] .backlink { display:none; }
+  #main-container { padding:14px 18px var(--pad-b) 18px; }
+  /* the rail is chrome, not content: it must not ride up out of view when the
+     list beside it grows (a "Load more" tap used to scroll Settings off the
+     bottom of the rail). Pin the shell to the viewport and let the content
+     column be the only scroller. */
+  #app { height:100vh; height:100dvh; min-height:0; overflow:hidden; }
+  #rail { height:100%; overflow-y:auto; overscroll-behavior:contain; }
+  #shell { min-height:0; }
+  #main-container { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+  .searchrow { margin-bottom:10px; }
+  /* the extra width is the whole point: use it for the list */
+  #song-list { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; align-content:start; }
+  .grid { grid-template-columns:repeat(4, 1fr); }
+
+  #tray { left:var(--rail-w); right:0; width:auto; max-width:none; transform:none; padding:6px 16px calc(6px + env(safe-area-inset-bottom)) 16px; }
+  #cab { left:var(--rail-w); right:0; width:auto; max-width:none; transform:none; }
+  #toast { bottom:calc(var(--tray-h) + 14px); }
+
+  /* Now Playing: art left, controls right, lyrics as a third column */
+  .np-screen .backlink { display:none; }
+  .np-grid { flex-direction:row; align-items:center; gap:22px; }
+  /* flex:0 0 auto, not 0 1 auto: letting the row shrink the art overrides
+     aspect-ratio on the width while height stays 100%, which stretches the
+     cover into a tall rectangle as soon as the lyrics column appears */
+  .np-art { max-height:100%; height:100%; flex:0 0 auto; margin:0; }
+  .np-mid { flex:1 1 260px; max-width:360px; }
+  .np-title { font-size:18px; text-align:left; align-self:flex-start; }
+  .np-artist { font-size:13px; margin-bottom:12px; align-self:flex-start; text-align:left; }
+  .np-transport { margin-top:12px; gap:12px; }
+  .np-main { width:56px; height:56px; }
+  .np-side { width:42px; height:42px; }
+  .np-dot { width:34px; height:34px; }
+  .np-chips { margin-top:12px; justify-content:flex-start; max-width:none; }
+  .chip { padding:6px 11px; font-size:12px; }
+  .np-lyrics { flex:1 1 260px; height:100%; margin-top:0; }
+  /* the art gives up height so the third column has room to be readable */
+  body.np-lyrics-on .np-art { height:62%; }
+  .lyrics-deck { max-width:none; }
+
+  /* bottom sheets become side sheets docked to the right edge */
+  .drawer, .sheet, .queue-panel, .editor-sheet {
+    left:auto; right:0; top:0; bottom:0; transform:none;
+    width:min(380px, 62vw); max-width:none; max-height:none; height:100%;
+    border-radius:20px 0 0 20px; overflow-y:auto; overscroll-behavior:contain;
+    animation:poet-side-in 0.2s ease-out; }
+  .sheet-grab { display:none; }
+}
+@keyframes poet-side-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
+
+/* --------------------------------------------------------------------------
+   NARROW PHONES — a 360px canvas is 320px of content once the gutters are
+   taken, and the full-size transport row is 340px wide. Step the controls
+   down so the row and all five chips fit on one line, rather than relying on
+   the chip scroller (which hides the outer chips behind an invisible affordance).
+   Width-driven, so it stacks with the height tiers above.
+   -------------------------------------------------------------------------- */
+@media (max-height: 700px) and (min-height: 501px) {
+  /* short portrait phones (360x640 and friends): step the controls down so the
+     art keeps a usable share of the column instead of being squeezed flat */
+  .np-art { max-height:260px; }
+  .np-artist { margin-bottom:12px; }
+  .np-transport { margin-top:12px; }
+  .np-chips { margin-top:12px; }
+  .np-main { width:64px; height:64px; }
+  .np-side { width:46px; height:46px; }
+  .np-dot { width:38px; height:38px; }
+  body.np-lyrics-on .np-art { height:110px; max-height:110px; }
+}
+/* below this the art is competing with the deck for room that does not exist;
+   the doc's own fallback is to drop it entirely (§1.3) */
+@media (max-height: 600px) and (min-height: 501px) {
+  body.np-lyrics-on .np-art { display:none; }
+}
+
+@media (max-width: 420px) {
+  .np-transport { gap:12px; }
+  .np-main { width:68px; height:68px; }
+  .np-side { width:48px; height:48px; }
+  .np-dot { width:40px; height:40px; }
+  .np-chips { gap:6px; }
+  .np-chips > .chip { padding:7px 10px; font-size:12px; }
+}
+
+/* --------------------------------------------------------------------------
+   TABLET — room for a labelled rail and real multi-column content.
+   Now Playing puts the art on top with the controls centred beneath it; the
+   landscape two-column split is wrong on a portrait-shaped panel.
+   -------------------------------------------------------------------------- */
+@media (min-width: 700px) and (min-height: 501px) {
+  #app { --shell-w:100%; --rail-w:210px; --tray-h:74px; --pad-b:100px; max-width:none; flex-direction:row; }
+  .hdr { display:none; }
+  #rail { display:flex; }
+  .settings-about { display:none; }
+  [data-screen="about"] .backlink { display:none; }
+  .rail-brand .hdr-name { display:block; }
+  .rail-item .ri-txt { display:block; }
+  .rail-sec { display:block; }
+  /* No content cap from here up: a song row uses the whole window, with the
+     duration pushed out to the right edge, instead of leaving a dead gutter. */
+  #main-container { padding:22px 26px var(--pad-b) 26px; }
+  /* same as landscape: the rail stays put, the content column scrolls */
+  #app { height:100vh; height:100dvh; min-height:0; overflow:hidden; }
+  #rail { height:100%; overflow-y:auto; overscroll-behavior:contain; }
+  #shell { min-height:0; }
+  #main-container { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+  /* one full-width column, not two: the row is the unit that benefits from
+     the extra width (see .row-dur, which is pushed to the far right) */
+  #song-list { display:block; }
+  .grid { grid-template-columns:repeat(4, 1fr); }
+  #tray { left:var(--rail-w); right:0; width:auto; max-width:none; transform:none; }
+  #cab { left:var(--rail-w); right:0; width:auto; max-width:none; transform:none; }
+
+  /* Now Playing, tablet treatment (docs/mockups/layout-modes.html): cover art
+     on top, every control centred beneath it. flex-start, not centre — the
+     mockup anchors the stack to the top so the art sits in the same place
+     whether or not the lyrics deck is open. Inherited by both PC tiers. */
+  .np-grid { flex-direction:column; align-items:center; justify-content:flex-start; }
+  .np-art { flex:0 0 auto; width:min(320px, 48%); height:auto; max-height:320px; margin:0 auto 20px auto; }
+  .np-mid { flex:0 0 auto; max-width:440px; align-items:center; }
+  .np-title { text-align:center; }
+  .np-chips { max-width:440px; justify-content:center; }
+  .np-lyrics { flex:1 1 auto; width:100%; margin:18px auto 0 auto; }
+  .lyrics-deck { max-width:560px; }
+  body.np-lyrics-on .np-art { max-height:240px; width:min(240px, 40%); }
+
+  /* sheets become centred dialogs */
+  .drawer, .sheet, .queue-panel {
+    left:50%; right:auto; top:50%; bottom:auto; transform:translate(-50%, -50%);
+    width:460px; max-width:460px; max-height:78vh; height:auto; border-radius:20px;
+    overflow-y:auto; animation:poet-fade 0.16s ease-out; }
+  .editor-sheet { left:50%; right:auto; top:50%; bottom:auto; transform:translate(-50%, -50%);
+    width:620px; max-width:620px; height:80vh; border-radius:20px; animation:poet-fade 0.16s ease-out; }
+  .sheet-grab { display:none; }
+}
+
+/* --------------------------------------------------------------------------
+   PC COMPACT — Groove-style single window. Now Playing stays a route for now
+   (the permanent side pane is §4 work); what changes here is density,
+   pointer affordances and the tray, which becomes the transport bar.
+   -------------------------------------------------------------------------- */
+@media (min-width: 1100px) and (min-height: 501px) {
+  #app { --rail-w:224px; --tray-h:84px; --pad-b:110px; }
+  #main-container { padding:24px 30px var(--pad-b) 30px; }
+  /* Now Playing is not a route on a desktop-sized window: the bar IS the
+     player, so it stays put and keeps reserving its height (§1.4) */
+  body.np-open #app { --tray-h:84px; --pad-b:110px; }
+  body.np-open #tray { display:block; }
+  /* Now Playing scrolls inside the content column like every other screen, so
+     the rail and the transport bar both stay where they are. */
+  body.np-open { overflow:hidden; }
+  body.np-open #main-container { overflow-y:auto; }
+  .grid { grid-template-columns:repeat(5, 1fr); }
+  .np-art { max-height:340px; }
+  .lyrics-deck { max-width:620px; }
+  /* pointer affordances the touch build never needed */
+  .row:hover, .rail-item:hover, .q-row:hover { background:var(--overlay-neutral); }
+  .row.playing:hover { background:var(--accent-faint); }
+  .row:focus-visible, .rail-item:focus-visible, .pill:focus-visible,
+  .chip:focus-visible, .navpill:focus-visible, .btn-primary:focus-visible {
+    outline:2px solid var(--accent); outline-offset:2px; }
+  .md { max-width:68ch; }
+  /* the global user-select:none is a touch-UI defence against long-press
+     selection; on a pointer device it just breaks copy/paste (§4) */
+  body { -webkit-user-select:text; user-select:text; }
+  .row, .rail-item, .navpill, .pill, .chip { -webkit-user-select:none; user-select:none; }
+}
+
+/* --------------------------------------------------------------------------
+   PC WIDE — grids widen with more columns rather than stretching cards, and
+   prose stays capped so 1920px does not produce 200-character lines.
+   -------------------------------------------------------------------------- */
+@media (min-width: 1400px) and (min-height: 501px) {
+  #app { --rail-w:250px; }
+  #main-container { padding:28px 38px var(--pad-b) 38px; }
+  .grid { grid-template-columns:repeat(6, 1fr); }
+}

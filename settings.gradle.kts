@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 rootProject.name = "PoetMusic"
 
 include(":app")
+include(":core")
+include(":desktop")

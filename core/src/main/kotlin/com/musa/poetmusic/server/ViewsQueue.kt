@@ -1,7 +1,7 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.data.MusicDatabase
-import com.musa.poetmusic.playback.PlayerController
+import com.musa.poetmusic.data.LibraryStore
+import com.musa.poetmusic.playback.QueueItem
 
 /** Slide-up queue panel (Musicolet-style). */
 object QueueViews {
@@ -16,7 +16,7 @@ object QueueViews {
      * open; #qp-body is re-rendered by every queue mutation and by the state
      * poller when the current track changes.
      */
-    fun queuePanel(db: MusicDatabase, items: List<PlayerController.QueueItem>, playing: Boolean): String = """
+    fun queuePanel(db: LibraryStore, items: List<QueueItem>, playing: Boolean, sourceName: String): String = """
         <div class="queue-shield" onclick="closeQueue()"></div>
         <div class="queue-panel">
           <div class="qp-hdr">
@@ -25,7 +25,7 @@ object QueueViews {
             </button>
             <div style="flex:1; min-width:0;">
               <div class="qp-title">Queue</div>
-              <div class="qp-src">Playing from ${esc(PlayerController.sourceName)}</div>
+              <div class="qp-src">Playing from ${esc(sourceName)}</div>
             </div>
             <button class="qp-clear" hx-post="/api/queue/clear" hx-target="#qp-body" hx-swap="innerHTML">Clear</button>
           </div>
@@ -33,7 +33,7 @@ object QueueViews {
         </div>"""
 
     /** Inner content of the queue panel; swapped on every queue change. */
-    fun queuePanelBody(db: MusicDatabase, items: List<PlayerController.QueueItem>, playing: Boolean): String {
+    fun queuePanelBody(db: LibraryStore, items: List<QueueItem>, playing: Boolean): String {
         val curIdx = items.indexOfFirst { it.current }
         if (items.isEmpty() || curIdx < 0) {
             return """

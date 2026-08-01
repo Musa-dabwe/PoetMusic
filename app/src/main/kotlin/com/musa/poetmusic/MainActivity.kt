@@ -7,6 +7,7 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -14,6 +15,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -115,6 +117,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        applyDisplayCutoutMode()
         applyStartupStatusBarColor()
         startService(Intent(this, PlaybackService::class.java))
         requestStartupPermissions()
@@ -159,20 +162,20 @@ class MainActivity : AppCompatActivity() {
 
     /** Hand the server the native capabilities it cannot reach on its own. */
     private fun wireServerCallbacks() {
-        PoetServer.addFolderRequester = {
+        PoetServer.host.addFolderRequester = {
             runOnUiThread { pickFolder.launch(null) }
         }
-        PoetServer.pinWidgetRequester = {
+        PoetServer.host.pinWidgetRequester = {
             runOnUiThread { requestPinWidget() }
         }
-        PoetServer.pickArtRequester = {
+        PoetServer.host.pickArtRequester = {
             runOnUiThread { runCatching { pickArt.launch("image/*") } }
         }
-        PoetServer.pickPortraitRequester = {
+        PoetServer.host.pickPortraitRequester = {
             runOnUiThread { runCatching { pickPortrait.launch("image/*") } }
         }
-        PoetServer.shareRequester = { ids -> shareTracks(ids) }
-        PoetServer.saveArtRequester = { id -> requestSaveArt(id) }
+        PoetServer.host.shareRequester = { ids -> shareTracks(ids) }
+        PoetServer.host.saveArtRequester = { id -> requestSaveArt(id) }
         LibraryScanner.onFinished = {
             runJs("poetToast('Library scan finished'); if (poetScreenUrl.indexOf('/screens/library') === 0) poetGo(poetScreenUrl);")
         }
@@ -421,9 +424,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Draw into the display cutout region on the short edges.
+     *
+     * Without this the system letterboxes the whole window away from the
+     * notch, which in landscape shows up as a black band down one side of the
+     * app (docs/native-ui-solidification.md §3.1) — not something CSS can
+     * reach. The content view is still inset by the system, so nothing lands
+     * under the notch; only the window background fills that strip, and
+     * applyStatusBarColor() keeps that background matching the app canvas.
+     */
+    private fun applyDisplayCutoutMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+    }
+
     private fun applyStatusBarColor(hex: String) {
         val color = runCatching { Color.parseColor(hex) }.getOrNull() ?: return
         window.statusBarColor = color
+        // The cutout strip (§3.1) and any letterboxed edge show the window
+        // background, so it has to track the canvas or it reads as a hard band.
+        window.setBackgroundDrawable(ColorDrawable(color))
         // Light canvas → dark status bar icons; dark canvas → light icons.
         val luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = luminance > 0.5
@@ -467,12 +492,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        PoetServer.addFolderRequester = null
-        PoetServer.pinWidgetRequester = null
-        PoetServer.pickArtRequester = null
-        PoetServer.pickPortraitRequester = null
-        PoetServer.shareRequester = null
-        PoetServer.saveArtRequester = null
+        PoetServer.host.addFolderRequester = null
+        PoetServer.host.pinWidgetRequester = null
+        PoetServer.host.pickArtRequester = null
+        PoetServer.host.pickPortraitRequester = null
+        PoetServer.host.shareRequester = null
+        PoetServer.host.saveArtRequester = null
         TagEditor.clearPendingArt()
         // Drop the WebView cache including the disk files, so album art HTTP
         // responses don't outlive the session. 'true' is required: with

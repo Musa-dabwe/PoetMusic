@@ -25,6 +25,15 @@ object Shell {
             """<rect x="236" y="100" width="40" height="312" rx="20" fill="currentColor"></rect>""" +
             """<rect x="312" y="240" width="40" height="172" rx="20" fill="currentColor"></rect></svg>"""
 
+    /**
+     * One nav-rail entry. [key] is matched against the current screen path by
+     * poetSyncRail() in poet.js to drive the active state, so it must stay in
+     * step with the `tab=` values the library screen understands.
+     */
+    private fun railItem(key: String, glyph: String, label: String, path: String): String =
+        """<button class="rail-item" data-rail="$key" title="$label" aria-label="$label"
+                   hx-get="$path" hx-target="#main-container"><span class="ri-ico">$glyph</span><span class="ri-txt">$label</span></button>"""
+
     fun page(accent: String, theme: String, folderCount: Int, dark: Boolean): String {
         val bg = CANVAS_TINTS[theme] ?: CANVAS_TINTS.getValue("Lavender")
         return """<!DOCTYPE html>
@@ -77,21 +86,47 @@ object Shell {
 </head>
 <body>
 <div id="app">
-  <div class="hdr">
-    <div class="hdr-brand" onclick="poetGo('/screens/journal')">
+  <!-- Nav rail. Hidden by CSS in portrait, where the header below owns
+       navigation; from the landscape breakpoint upwards it replaces the
+       header and carries the library tabs. Both live in the DOM at all sizes
+       so the layout is a pure CSS decision (docs/native-ui-solidification.md
+       §2.6) and no server-side branching is needed. -->
+  <nav id="rail" aria-label="Primary">
+    <div class="rail-brand" onclick="poetGo('/screens/journal')">
       <div class="hdr-logo">$LOGO_SVG</div>
       <div class="hdr-name">Poet</div>
     </div>
-    <div style="display:flex; gap:8px;">
-      <button id="nav-library" class="navpill active" hx-get="/screens/library" hx-target="#main-container">Library</button>
-      <button id="nav-settings" class="navpill" hx-get="/screens/settings" hx-target="#main-container">Settings</button>
-    </div>
-  </div>
+    <div class="rail-sec">Library</div>
+    ${railItem("songs", "♪", "Songs", "/screens/library?tab=songs")}
+    ${railItem("albums", "▣", "Albums", "/screens/library?tab=albums")}
+    ${railItem("artists", "☻", "Artists", "/screens/library?tab=artists")}
+    ${railItem("genres", "◈", "Genres", "/screens/library?tab=genres")}
+    ${railItem("playlists", "≡", "Playlists", "/screens/library?tab=playlists")}
+    <div class="rail-sec">Collection</div>
+    ${railItem("favorites", "♥", "Favourites", "/screens/favorites")}
+    ${railItem("journal", "◐", "Journal", "/screens/journal")}
+    ${railItem("about", "◇", "About", "/screens/about")}
+    <div class="rail-spacer"></div>
+    ${railItem("settings", "⚙", "Settings", "/screens/settings")}
+  </nav>
 
-  <!-- Initial screen is loaded once from DOMContentLoaded (see JS below):
-       a load-triggered fetch here raced the onboarding redirect and could
-       swap the tip away right after it appeared. -->
-  <div id="main-container"></div>
+  <div id="shell">
+    <div class="hdr">
+      <div class="hdr-brand" onclick="poetGo('/screens/journal')">
+        <div class="hdr-logo">$LOGO_SVG</div>
+        <div class="hdr-name">Poet</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="nav-library" class="navpill active" hx-get="/screens/library" hx-target="#main-container">Library</button>
+        <button id="nav-settings" class="navpill" hx-get="/screens/settings" hx-target="#main-container">Settings</button>
+      </div>
+    </div>
+
+    <!-- Initial screen is loaded once from DOMContentLoaded (see JS below):
+         a load-triggered fetch here raced the onboarding redirect and could
+         swap the tip away right after it appeared. -->
+    <div id="main-container"></div>
+  </div>
 
   <div id="tray">
     <div id="tray-progress"></div>

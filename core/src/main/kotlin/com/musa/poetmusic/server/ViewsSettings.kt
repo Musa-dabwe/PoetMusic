@@ -1,16 +1,14 @@
 package com.musa.poetmusic.server
 
-import com.musa.poetmusic.BuildConfig
-import com.musa.poetmusic.data.LibraryScanner
-import com.musa.poetmusic.data.MusicDatabase
-import com.musa.poetmusic.playback.AudioFx
+import com.musa.poetmusic.data.LibraryStore
+import com.musa.poetmusic.data.ScanPort
+import com.musa.poetmusic.playback.EqPort
 import com.musa.poetmusic.playback.EqPresets
-import com.musa.poetmusic.playback.PlayerController
 
 /** Settings screen, scan card and the About screen. */
 object SettingsViews {
 
-    fun settingsScreen(db: MusicDatabase, showTip: Boolean): String {
+    fun settingsScreen(db: LibraryStore, eq: EqPort, scanner: ScanPort, prevRestartMs: Long, showTip: Boolean): String {
         val folders = db.folders()
         val folderRows = folders.joinToString("") { f ->
             """
@@ -59,19 +57,19 @@ object SettingsViews {
 
           <div class="card">
             <div class="card-title">Library scan</div>
-            <div id="scan-card">${scanCard(db)}</div>
+            <div id="scan-card">${scanCard(db, scanner)}</div>
           </div>
 
           <div class="card">
             <div class="card-title" style="margin-bottom:4px;">Equalizer</div>
             <div class="card-sub">Shape the sound of every track Poet plays</div>
-            <div id="eq-card">${equalizerCard(db)}</div>
+            <div id="eq-card">${equalizerCard(eq)}</div>
           </div>
 
           <div class="card">
             <div class="card-title" style="margin-bottom:4px;">Playback</div>
             <div class="card-sub">Restart the current song when Previous is pressed after…</div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">${prevOptions(db)}</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">${prevOptions(prevRestartMs)}</div>
           </div>
 
           <div class="card">
@@ -95,7 +93,10 @@ object SettingsViews {
             <div style="display:flex; gap:8px; flex-wrap:wrap;">$tints</div>
           </div>
 
-          <div class="card" style="cursor:pointer;" hx-get="/screens/about" hx-target="#main-container">
+          <!-- Portrait only: from the landscape breakpoint upwards About is a
+               nav-rail destination (Shell.kt), so this card hides itself rather
+               than offering the same screen twice. -->
+          <div class="card settings-about" style="cursor:pointer;" hx-get="/screens/about" hx-target="#main-container">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
               <div style="min-width:0;">
                 <div class="card-title" style="margin-bottom:2px;">About Poet Music</div>
@@ -117,8 +118,8 @@ object SettingsViews {
      * a preset moves every band at once, and the sliders have to follow. The
      * band count and centre frequencies come from the device, not from us.
      */
-    fun equalizerCard(db: MusicDatabase): String {
-        val s = AudioFx.state(db)
+    fun equalizerCard(eq: EqPort): String {
+        val s = eq.state()
         if (!s.available && !s.bassAvailable && !s.virtualizerAvailable) {
             return """<div style="font-size:12px; color:var(--muted); line-height:1.5;">
               This device doesn't offer the system audio effects Poet drives, so the
@@ -179,13 +180,13 @@ object SettingsViews {
      * bar uses, so the control reads as filled without any client-side paint.
      */
     private fun strengthRow(label: String, kind: String, value: Int, enabled: Boolean): String {
-        val pct = value * 100 / AudioFx.STRENGTH_MAX
+        val pct = value * 100 / EqPort.STRENGTH_MAX
         return """
         <div class="eq-strength${if (enabled) "" else " eq-off"}">
           <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:700; margin-bottom:6px;">
             <span>$label</span><span style="color:var(--muted);" id="eq-$kind-val">$pct%</span>
           </div>
-          <input class="seek" type="range" min="0" max="${AudioFx.STRENGTH_MAX}" step="50" value="$value" name="v"
+          <input class="seek" type="range" min="0" max="${EqPort.STRENGTH_MAX}" step="50" value="$value" name="v"
                  style="background:linear-gradient(to right, var(--accent) $pct%, var(--track-empty) $pct%);"
                  oninput="poetEqStrength('$kind', this)"
                  hx-post="/api/eq/$kind" hx-trigger="change" hx-target="#eq-card" hx-swap="innerHTML">
@@ -206,8 +207,7 @@ object SettingsViews {
     /** The Previous-button restart thresholds, in seconds (0 = always previous). */
     val PREV_THRESHOLDS = listOf(0 to "Always previous", 3 to "3 seconds", 5 to "5 seconds", 10 to "10 seconds")
 
-    private fun prevOptions(db: MusicDatabase): String {
-        val current = PlayerController.readPrevRestartMs(db)
+    private fun prevOptions(current: Long): String {
         return PREV_THRESHOLDS.joinToString("") { (sec, label) ->
             val on = sec * 1000L == current
             """<button type="button" class="chip${if (on) " on" else ""}"
@@ -223,73 +223,13 @@ object SettingsViews {
      * license, security policy, tech stack and developer info and rendered
      * through the in-app [Markdown] renderer so it follows the active theme.
      */
-    fun aboutScreen(db: MusicDatabase): String {
-        val trackCount = db.trackCount()
-        val folderCount = db.folders().size
-        val md = """
-# Poet Music
-
-**Version ${BuildConfig.VERSION_NAME}** · offline-first, pastel-themed music player for Android.
-
-Your library holds **$trackCount ${if (trackCount == 1) "track" else "tracks"}** across **$folderCount ${if (folderCount == 1) "folder" else "folders"}**.
-
-Poet Music is an offline-first music player. The UI is an [htmx](https://htmx.org) single-page app served by an embedded [Ktor](https://ktor.io) server running inside the app process and rendered in a native WebView. Playback is handled natively by Media3 / ExoPlayer through a foreground `MediaSessionService`, so music keeps playing with the screen off and shows lockscreen / notification controls.
-
-## Features
-
-- **Local library** — pick any folder with the system file picker; Poet scans it for audio and reads tags, album art and `.lrc` lyric files.
-- **Now Playing** — seek bar, playback speed, sleep timer, synced lyrics, favourites and a slide-up queue panel.
-- **Musicolet-style queue** — playlists are fixed reference lists; the queue is a temporary working copy with static shuffle, per-song remove and drag-to-reorder.
-- **Tag editor** — edit ID3v2 details, embed artwork and build synced `.lrc` files, written straight into MP3 files.
-- **Theming** — pastel accent colours, canvas tints and a full dark mode.
-
-## Tech stack
-
-- **Language** — Kotlin
-- **UI** — htmx single-page app in a native WebView
-- **Server** — embedded Ktor (CIO) bound to `127.0.0.1:8080`
-- **Playback** — Media3 / ExoPlayer in a foreground `MediaSessionService`
-- **Storage** — SQLite (tracks, folders, playlists, settings)
-- **Minimum Android** — 8.0 (API 26)
-
-## Architecture
-
-- `server/` — Ktor routes, the page shell + client JS, and server-rendered views.
-- `playback/` — the foreground Media3 session and a thread-safe player bridge.
-- `data/` — the SQLite database, library scanner, LRC parser and MP3 tag editor.
-
-The embedded server binds to `127.0.0.1` only and is never reachable from other devices on the network.
-
-## Security & privacy
-
-- **Local-only server** — the Ktor server binds exclusively to `127.0.0.1:8080`; it is not reachable from other devices.
-- **No network calls** — the app makes no outbound requests, collects no analytics and transmits no user data.
-- **Scoped storage** — folders are accessed through the Storage Access Framework with user-granted permissions only.
-- **Escaped output** — all user- and file-derived strings are escaped before rendering to prevent markup injection.
-
-To report a vulnerability, open a [GitHub security advisory](https://github.com/Musa-dabwe/PoetMusic/security/advisories/new) or an issue with the `security` label.
-
-## Developer
-
-Built by **Musa-dabwe** (Fackson Musadabwe Mutetesha).
-
-- **GitHub** — [Musa-dabwe](https://github.com/Musa-dabwe)
-- **Repository** — [Musa-dabwe/PoetMusic](https://github.com/Musa-dabwe/PoetMusic)
-
-## Credits
-
-- **Placeholder cover art** — [Designed by rawpixel.com / Freepik](http://www.freepik.com). The original image was modified (cropped/resized) for in-app use, as permitted by the Freepik free license.
-
-## License
-
-Licensed under the **Apache License 2.0**.
-
-Copyright © 2026 Fackson Musadabwe Mutetesha. Licensed under the Apache License, Version 2.0; you may not use this software except in compliance with the License. The software is distributed on an "AS IS" basis, without warranties or conditions of any kind.
-""".trimIndent()
+    fun aboutScreen(db: LibraryStore, about: AboutSpec): String {
+        val md = AboutDoc.markdown(about, db.trackCount(), db.folders().size)
 
         return """
         <div class="screen" data-screen="about">
           <button class="backlink" hx-get="/screens/settings" hx-target="#main-container">← Settings</button>
+          <!-- the rail is the way back once it is showing; see poet.css -->
           <div class="card">${Markdown.render(md)}</div>
         </div>"""
     }
@@ -300,13 +240,13 @@ Copyright © 2026 Fackson Musadabwe Mutetesha. Licensed under the Apache License
      * every-2s DOM churn stops as soon as the scan finishes instead of
      * tearing the card down forever while the user reads Settings.
      */
-    fun scanCard(db: MusicDatabase): String {
-        val scanning = LibraryScanner.isScanning
-        val status = if (scanning) esc(LibraryScanner.progressText)
+    fun scanCard(db: LibraryStore, scanner: ScanPort): String {
+        val scanning = scanner.isScanning
+        val status = if (scanning) esc(scanner.progressText)
         else esc(db.getSetting("last_scan", "Not scanned yet"))
-        val auto = LibraryScanner.autoScanEnabled(db)
-        val intervals = LibraryScanner.INTERVAL_CHOICES.joinToString("") { h ->
-            val on = h == LibraryScanner.intervalHours(db)
+        val auto = scanner.autoScanEnabled()
+        val intervals = ScanPort.INTERVAL_CHOICES.joinToString("") { h ->
+            val on = h == scanner.intervalHours()
             """<button type="button" class="chip${if (on) " on" else ""}"
                     hx-post="/api/library/scan-interval?h=$h" hx-target="#scan-card" hx-swap="innerHTML">${h}h</button>"""
         }
