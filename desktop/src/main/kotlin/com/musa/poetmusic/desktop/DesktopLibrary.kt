@@ -362,7 +362,7 @@ class DesktopLibrary(dbFile: File) : LibraryStore {
             // those edits.
             val fileChanged = c.query(
                 "SELECT file_mtime FROM tracks WHERE uri=?", uri
-            ) { it.getLong(0) }.firstOrNull()?.let { it != lastModified } ?: true
+            ) { it.getLong(1) }.firstOrNull()?.let { it != lastModified } ?: true
 
             if (fileChanged) {
                 // New row or file changed since last scan: overwrite tags from file.

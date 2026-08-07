@@ -88,9 +88,12 @@ object LibraryViews {
     private fun albumsTab(db: LibraryStore, sort: String): String {
         val albums = db.albums(sort)
         if (albums.isEmpty()) return """<div class="empty">No albums yet.</div>"""
+        // Batch-resolve artwork timestamps to avoid N+1 queries.
+        val artIds = albums.map { it.artTrackId }.distinct()
+        val artTimestamps = db.tracksByIds(artIds).associate { it.id to it.lastModified }
         val cards = albums.joinToString("") { a ->
             val year = if (a.year.isNotBlank()) " · ${esc(a.year)}" else ""
-            val artVersion = db.track(a.artTrackId)?.lastModified ?: 0
+            val artVersion = artTimestamps[a.artTrackId] ?: 0
             """
             <div class="album-card" hx-get="/screens/album?album=${enc(a.album)}&artist=${enc(a.artist)}" hx-target="#main-container">
               <div class="album-art" style="background:${artColor(a.artTrackId)};"><img loading="lazy" src="/api/art/${a.artTrackId}?v=$artVersion" alt="" onerror="this.remove()"></div>
