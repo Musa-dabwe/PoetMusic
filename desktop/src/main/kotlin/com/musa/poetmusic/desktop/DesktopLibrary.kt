@@ -74,13 +74,14 @@ class DesktopLibrary(dbFile: File) : LibraryStore {
                     disc_no INTEGER NOT NULL DEFAULT 0,
                     composer TEXT NOT NULL DEFAULT '',
                     comment TEXT NOT NULL DEFAULT '',
-                    has_art INTEGER NOT NULL DEFAULT 0,
-                    lrc_uri TEXT,
-                    folder_id INTEGER NOT NULL DEFAULT 0,
-                    favorite INTEGER NOT NULL DEFAULT 0,
-                    date_added INTEGER NOT NULL DEFAULT 0,
-                    last_modified INTEGER NOT NULL DEFAULT 0
-                )"""
+                   has_art INTEGER NOT NULL DEFAULT 0,
+                   lrc_uri TEXT,
+                   folder_id INTEGER NOT NULL DEFAULT 0,
+                   favorite INTEGER NOT NULL DEFAULT 0,
+                   date_added INTEGER NOT NULL DEFAULT 0,
+                   last_modified INTEGER NOT NULL DEFAULT 0,
+                   file_mtime INTEGER NOT NULL DEFAULT 0
+               )"""
             )
             st.executeUpdate(
                 """CREATE TABLE IF NOT EXISTS folders(
@@ -120,6 +121,20 @@ class DesktopLibrary(dbFile: File) : LibraryStore {
             st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_plays_track ON plays(track_id)")
         }
         migrateInterimSettingsTable(c)
+        migrateFileMtimeColumn(c)
+    }
+
+    /**
+     * Add the [file_mtime] column that lets the scanner preserve user-edited
+     * tags when the underlying file hasn't changed.  Missing from installs
+     * created before the tag-editor fix landed.
+     */
+    private fun migrateFileMtimeColumn(c: Connection) {
+        val columns = c.query("PRAGMA table_info(tracks)") { it.getString("name") }
+        if (columns.contains("file_mtime")) return
+        c.createStatement().use { st ->
+            st.executeUpdate("ALTER TABLE tracks ADD COLUMN file_mtime INTEGER NOT NULL DEFAULT 0")
+        }
     }
 
     /**
@@ -341,23 +356,41 @@ class DesktopLibrary(dbFile: File) : LibraryStore {
         // "comment" is deliberately absent, exactly as on Android: a rescan must
         // not wipe a comment the tag editor saved.
         transaction { c ->
-            val updated = c.update(
-                """UPDATE tracks SET parent_uri=?, display_name=?, title=?, artist=?, album=?,
-                       duration_ms=?, track_no=?, genre=?, year=?, album_artist=?, disc_no=?,
-                       composer=?, has_art=?, lrc_uri=?, folder_id=?, last_modified=?
-                   WHERE uri=?""",
-                parentUri, displayName, title, artist, album, durationMs, trackNo, genre, year,
-                albumArtist, discNo, composer, hasArt, lrcUri, folderId, lastModified, uri
-            )
-            if (updated == 0) {
+            // Check whether the file changed since the last scan.  If it hasn't,
+            // the user may have edited tags through the tag editor (library-only
+            // save on a non-writable format, or a write that failed).  Preserve
+            // those edits.
+            val fileChanged = c.query(
+                "SELECT file_mtime FROM tracks WHERE uri=?", uri
+            ) { it.getLong(1) }.firstOrNull()?.let { it != lastModified } ?: true
+
+            if (fileChanged) {
+                // New row or file changed since last scan: overwrite tags from file.
+                val updated = c.update(
+                    """UPDATE tracks SET parent_uri=?, display_name=?, title=?, artist=?, album=?,
+                           duration_ms=?, track_no=?, genre=?, year=?, album_artist=?, disc_no=?,
+                           composer=?, has_art=?, lrc_uri=?, folder_id=?, last_modified=?, file_mtime=?
+                       WHERE uri=?""",
+                    parentUri, displayName, title, artist, album, durationMs, trackNo, genre, year,
+                    albumArtist, discNo, composer, hasArt, lrcUri, folderId, lastModified, lastModified, uri
+                )
+                if (updated == 0) {
+                    c.update(
+                        """INSERT INTO tracks(uri, parent_uri, display_name, title, artist, album,
+                               duration_ms, track_no, genre, year, album_artist, disc_no, composer,
+                               has_art, lrc_uri, folder_id, last_modified, file_mtime, date_added)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        uri, parentUri, displayName, title, artist, album, durationMs, trackNo, genre, year,
+                        albumArtist, discNo, composer, hasArt, lrcUri, folderId, lastModified, lastModified,
+                        System.currentTimeMillis()
+                    )
+                }
+            } else {
+                // File unchanged: preserve user-edited tags, update housekeeping only.
                 c.update(
-                    """INSERT INTO tracks(uri, parent_uri, display_name, title, artist, album,
-                           duration_ms, track_no, genre, year, album_artist, disc_no, composer,
-                           has_art, lrc_uri, folder_id, last_modified, date_added)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    uri, parentUri, displayName, title, artist, album, durationMs, trackNo, genre, year,
-                    albumArtist, discNo, composer, hasArt, lrcUri, folderId, lastModified,
-                    System.currentTimeMillis()
+                    """UPDATE tracks SET lrc_uri=?, folder_id=?, duration_ms=?
+                       WHERE uri=?""",
+                    lrcUri, folderId, durationMs, uri
                 )
             }
         }

@@ -530,10 +530,11 @@ fun Application.poetRoutes(deps: PoetDeps) {
                 rename = p["rename"] == "1", renamePattern = p["renamePattern"] ?: ""
             )
             val result = deps.tags.saveTags(id, form)
-            if (result.artChanged) {
-                art.evict(id)
-                host.onLibraryChanged()
-            }
+            if (result.artChanged) art.evict(id)
+            // Always refresh the player and widget so Now Playing, the tray
+            // and the lockscreen reflect the new tags immediately.
+            player.onTrackMetadataChanged(id)
+            host.onLibraryChanged()
             val artEvent = if (result.artChanged) ""","poet-art-changed":$id""" else ""
             call.response.header(
                 "HX-Trigger",
@@ -569,9 +570,12 @@ fun Application.poetRoutes(deps: PoetDeps) {
                 return@put call.respond(HttpStatusCode.NoContent)
             }
             val result = deps.tags.applyBatch(ids, form)
-            // A batch write may rename nothing but does change titles the queue
-            // is showing; refresh the screen and drop stale covers.
-            ids.forEach(art::evict)
+            // Refresh each edited track in the player so queue, tray and
+            // lockscreen show the new tags immediately.
+            ids.forEach { id ->
+                art.evict(id)
+                player.onTrackMetadataChanged(id)
+            }
             host.onLibraryChanged()
             call.response.header(
                 "HX-Trigger",
@@ -753,11 +757,11 @@ fun Application.poetRoutes(deps: PoetDeps) {
             val id = call.parameters["id"]?.toLongOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
             when (val result = art.get(id, store.track(id))) {
                 is ArtCache.Result.Jpeg -> {
-                    call.response.header("Cache-Control", "max-age=3600")
+                    call.response.header("Cache-Control", "no-store")
                     call.respondBytes(result.bytes, ContentType.parse("image/jpeg"))
                 }
                 is ArtCache.Result.Svg -> {
-                    call.response.header("Cache-Control", "max-age=3600")
+                    call.response.header("Cache-Control", "no-store")
                     call.respondText(result.markup, ContentType.parse("image/svg+xml"))
                 }
             }

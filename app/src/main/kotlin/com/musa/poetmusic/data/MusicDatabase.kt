@@ -15,7 +15,7 @@ import android.database.sqlite.SQLiteOpenHelper
  * on-disk footprint tight.
  */
 class MusicDatabase(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 4), LibraryStore {
+    SQLiteOpenHelper(context.applicationContext, "poet_music.db", null, 5), LibraryStore {
 
     init {
         setWriteAheadLoggingEnabled(true)
@@ -64,7 +64,8 @@ class MusicDatabase(context: Context) :
                 folder_id INTEGER NOT NULL DEFAULT 0,
                 favorite INTEGER NOT NULL DEFAULT 0,
                 date_added INTEGER NOT NULL DEFAULT 0,
-                last_modified INTEGER NOT NULL DEFAULT 0
+                last_modified INTEGER NOT NULL DEFAULT 0,
+                file_mtime INTEGER NOT NULL DEFAULT 0
             )"""
         )
         db.execSQL(
@@ -124,6 +125,9 @@ class MusicDatabase(context: Context) :
         }
         if (oldVersion < 4) {
             createPlaysTable(db)
+        }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE tracks ADD COLUMN file_mtime INTEGER NOT NULL DEFAULT 0")
         }
     }
 
@@ -185,22 +189,41 @@ class MusicDatabase(context: Context) :
         hasArt: Boolean, lrcUri: String?, folderId: Long, lastModified: Long
     ) {
         val db = writableDatabase
+        // Check whether the file changed since the last scan. If it hasn't,
+        // the user may have edited tags through the tag editor (library-only
+        // save on non-MP3, or a write that failed). Preserve those edits.
+        var fileChanged = true
+        db.rawQuery("SELECT file_mtime FROM tracks WHERE uri=?", arrayOf(uri)).use { c ->
+            if (c.moveToFirst()) fileChanged = c.getLong(0) != lastModified
+        }
+
         // "comment" is deliberately absent: MediaMetadataRetriever can't read
         // COMM frames, so rescans must not wipe a comment saved by the editor.
-        val cv = ContentValues().apply {
-            put("uri", uri); put("parent_uri", parentUri); put("display_name", displayName)
-            put("title", title); put("artist", artist); put("album", album)
-            put("duration_ms", durationMs); put("track_no", trackNo)
-            put("genre", genre); put("year", year)
-            put("album_artist", albumArtist); put("disc_no", discNo); put("composer", composer)
-            put("has_art", if (hasArt) 1 else 0); put("lrc_uri", lrcUri); put("folder_id", folderId)
-            put("last_modified", lastModified)
-        }
         transaction(db) {
-            val updated = db.update("tracks", cv, "uri=?", arrayOf(uri))
-            if (updated == 0) {
-                cv.put("date_added", System.currentTimeMillis())
-                db.insert("tracks", null, cv)
+            if (fileChanged) {
+                // New row or file changed since last scan: overwrite tags from file.
+                val cv = ContentValues().apply {
+                    put("uri", uri); put("parent_uri", parentUri); put("display_name", displayName)
+                    put("title", title); put("artist", artist); put("album", album)
+                    put("duration_ms", durationMs); put("track_no", trackNo)
+                    put("genre", genre); put("year", year)
+                    put("album_artist", albumArtist); put("disc_no", discNo); put("composer", composer)
+                    put("has_art", if (hasArt) 1 else 0); put("lrc_uri", lrcUri); put("folder_id", folderId)
+                    put("last_modified", lastModified); put("file_mtime", lastModified)
+                }
+                val updated = db.update("tracks", cv, "uri=?", arrayOf(uri))
+                if (updated == 0) {
+                    cv.put("date_added", System.currentTimeMillis())
+                    db.insert("tracks", null, cv)
+                }
+            } else {
+                // File unchanged: preserve user-edited tags, update housekeeping only.
+                val cv = ContentValues().apply {
+                    put("lrc_uri", lrcUri)
+                    put("folder_id", folderId)
+                    put("duration_ms", durationMs)
+                }
+                db.update("tracks", cv, "uri=?", arrayOf(uri))
             }
         }
     }

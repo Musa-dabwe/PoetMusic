@@ -550,6 +550,14 @@ class GstPlayer(private val store: LibraryStore) : PlayerPort {
         }
     }
 
+    override fun onTrackMetadataChanged(trackId: Long) = ops.execute {
+        val fresh = store.track(trackId) ?: return@execute
+        queue.forEachIndexed { i, t ->
+            if (t.id == trackId) queue[i] = fresh
+        }
+        refreshSnapshot()
+    }
+
     override fun setPrevRestartMs(ms: Long) {
         val v = ms.coerceIn(0, 30_000)
         store.setSetting("prev_restart_ms", v.toString())

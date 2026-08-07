@@ -46,11 +46,12 @@ object QueueViews {
         val cur = items[curIdx]
         val upcoming = items.drop(curIdx + 1)
         val byId = db.tracksByIds(items.map { it.trackId }).associateBy { it.id }
+        val curTrack = byId[cur.trackId]
 
         val nowCard = """
         <div class="qp-label">Now playing</div>
         <div class="qp-now">
-          <div class="row-art" style="width:52px; height:52px; border-radius:12px;"><img src="/api/art/${cur.trackId}" alt=""></div>
+          <div class="row-art" style="width:52px; height:52px; border-radius:12px;"><img src="/api/art/${cur.trackId}?v=${curTrack?.lastModified ?: 0}" alt=""></div>
           <div class="row-main">
             <div class="row-title" style="font-size:15px; font-weight:700;">${esc(cur.title)}</div>
             <div class="row-sub">${esc(cur.artist)}</div>
@@ -75,7 +76,7 @@ object QueueViews {
                 """
                 <div class="q-row" data-qi="${it.index}">
                   <div class="q-num">${pos + 1}</div>
-                  <div class="row-art" hx-post="/api/queue/jump/${it.index}" hx-target="#qp-body" hx-swap="innerHTML"><img loading="lazy" src="/api/art/${it.trackId}" alt=""></div>
+                  <div class="row-art" hx-post="/api/queue/jump/${it.index}" hx-target="#qp-body" hx-swap="innerHTML"><img loading="lazy" src="/api/art/${it.trackId}?v=${byId[it.trackId]?.lastModified ?: 0}" alt=""></div>
                   <div class="row-main" hx-post="/api/queue/jump/${it.index}" hx-target="#qp-body" hx-swap="innerHTML">
                     <div class="row-title">${esc(it.title)}</div>
                     <div class="row-sub">${esc(it.artist)}</div>

@@ -126,6 +126,9 @@ interface PlayerPort {
     /** Repoint queued entries after the tag editor renames the physical file. */
     fun onTrackFileRenamed(trackId: Long, newUri: String)
 
+    /** Refresh queue and snapshot after the tag editor changes a track's metadata. */
+    fun onTrackMetadataChanged(trackId: Long)
+
     /**
      * Previous restarts the current song once this much of it has played, and
      * steps back before that. 0 means never restart.

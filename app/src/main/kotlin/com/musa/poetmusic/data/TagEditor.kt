@@ -56,7 +56,10 @@ object TagEditor {
 
         val customArt = if (form.artAction == "custom") pendingArt else null
         val removeArt = form.artAction == "remove"
-        val artChanged = isMp3 && (customArt != null || (removeArt && track.hasArt))
+        // Fire for all formats so the route evicts the cache and refreshes the UI,
+        // even when the art is saved to a library-side override file rather than
+        // embedded in the track.
+        val artChanged = customArt != null || (removeArt && track.hasArt)
 
         var fileMessage = if (isMp3) "Tags written to file" else "Saved to library (file tag writing supports MP3 only)"
         if (isMp3) {
@@ -77,6 +80,18 @@ object TagEditor {
                         cleanTrackNo, cleanAlbumArtist, cleanDiscNo, cleanComposer, cleanComment
                     )
                 }
+            }
+        }
+
+        // Non-MP3: save artwork to a library-side override file so it persists
+        // across rescans and survives the fact that the container can't be written.
+        if (!isMp3 && artChanged) {
+            if (customArt != null) {
+                writeArtOverride(context, trackId, customArt, pendingArtMime)
+                fileMessage += " \u00b7 artwork saved in Poet"
+            } else if (removeArt) {
+                deleteArtOverride(context, trackId)
+                fileMessage += " \u00b7 artwork removed"
             }
         }
 
@@ -270,6 +285,28 @@ object TagEditor {
             return Result(false, "Export failed: ${e.message ?: e.javaClass.simpleName}")
         }
     }
+
+    // ---------------- art overrides (non-MP3 formats) ----------------
+
+    /**
+     * Write an art override for a track whose container cannot be written
+     * (FLAC, M4A, OGG, etc.).  [AndroidHost.embeddedArt] checks this
+     * directory before falling back to MediaMetadataRetriever.
+     */
+    private fun writeArtOverride(context: Context, trackId: Long, art: ByteArray, mime: String) {
+        val dir = artOverrideDir(context)
+        dir.mkdirs()
+        File(dir, "$trackId").writeBytes(art)
+        File(dir, "$trackId.mime").writeText(mime)
+    }
+
+    private fun deleteArtOverride(context: Context, trackId: Long) {
+        val dir = artOverrideDir(context)
+        File(dir, "$trackId").delete()
+        File(dir, "$trackId.mime").delete()
+    }
+
+    fun artOverrideDir(context: Context): File = File(context.filesDir, "art-overrides")
 
     private fun lrcName(track: Track): String =
         track.displayName.substringBeforeLast('.') + ".lrc"

@@ -88,11 +88,15 @@ object LibraryViews {
     private fun albumsTab(db: LibraryStore, sort: String): String {
         val albums = db.albums(sort)
         if (albums.isEmpty()) return """<div class="empty">No albums yet.</div>"""
+        // Batch-resolve artwork timestamps to avoid N+1 queries.
+        val artIds = albums.map { it.artTrackId }.distinct()
+        val artTimestamps = db.tracksByIds(artIds).associate { it.id to it.lastModified }
         val cards = albums.joinToString("") { a ->
             val year = if (a.year.isNotBlank()) " · ${esc(a.year)}" else ""
+            val artVersion = artTimestamps[a.artTrackId] ?: 0
             """
             <div class="album-card" hx-get="/screens/album?album=${enc(a.album)}&artist=${enc(a.artist)}" hx-target="#main-container">
-              <div class="album-art" style="background:${artColor(a.artTrackId)};"><img loading="lazy" src="/api/art/${a.artTrackId}" alt="" onerror="this.remove()"></div>
+              <div class="album-art" style="background:${artColor(a.artTrackId)};"><img loading="lazy" src="/api/art/${a.artTrackId}?v=$artVersion" alt="" onerror="this.remove()"></div>
               <div style="font-size:14px; font-weight:600; margin-top:8px;">${esc(a.album)}</div>
               <div style="font-size:12px; color:var(--muted);">${esc(a.artist)} · ${a.trackCount} songs$year</div>
             </div>"""
@@ -189,13 +193,14 @@ object LibraryViews {
         // Prefer a track that carries a cover, so an album whose art sits on a
         // later file still shows it (and the full-screen viewer has something).
         val artId = (tracks.firstOrNull { it.hasArt } ?: tracks.firstOrNull())?.id ?: 0
+        val artVersion = if (artId > 0) db.track(artId)?.lastModified ?: 0 else 0
         return """
         <div class="screen">
           <button class="backlink" hx-get="/screens/library?tab=albums" hx-target="#main-container">← Albums</button>
           <div style="display:flex; align-items:center; gap:16px; margin-bottom:18px;">
             <div class="album-art" style="width:96px; background:${artColor(artId)};"
                  hx-get="/partial/art-view/$artId" hx-target="#modal-root" hx-swap="innerHTML"
-                 role="button" aria-label="Open cover full screen"><img src="/api/art/$artId" alt="" onerror="this.remove()"></div>
+                 role="button" aria-label="Open cover full screen"><img src="/api/art/$artId?v=$artVersion" alt="" onerror="this.remove()"></div>
             <div>
               <div style="font-size:20px; font-weight:700; letter-spacing:-0.02em;">${esc(album)}</div>
               <div style="font-size:13px; color:var(--muted);">${esc(artist)} · ${tracks.size} songs</div>
