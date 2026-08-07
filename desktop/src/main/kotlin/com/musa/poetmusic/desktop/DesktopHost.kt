@@ -69,9 +69,16 @@ class DesktopHost(
     override fun asset(name: String): ByteArray? =
         DesktopHost::class.java.classLoader.getResourceAsStream("web/$name")?.use { it.readBytes() }
 
-    override fun embeddedArt(track: Track): ByteArray? = runCatching {
-        AudioFileIO.read(track.file()).tag?.firstArtwork?.binaryData
-    }.getOrNull()
+    override fun embeddedArt(track: Track): ByteArray? {
+        // Library-side art override: covers formats JAudiotagger can't write,
+        // and art the user removed from a writable file.
+        val overrideFile = File(artOverrideDir(), "${track.id}")
+        if (overrideFile.exists()) return overrideFile.readBytes().takeIf { it.isNotEmpty() }
+
+        return runCatching {
+            AudioFileIO.read(track.file()).tag?.firstArtwork?.binaryData
+        }.getOrNull()
+    }
 
     override fun openAudioStream(track: Track): InputStream? =
         runCatching { track.file().inputStream() }.getOrNull()
@@ -101,6 +108,9 @@ class DesktopHost(
     // ---------- listening journal portrait ----------
 
     private fun portraitFile(): File = File(DesktopLibrary.defaultDbFile().parentFile, "journal-portrait")
+
+    /** Directory for art override files (non-writable format edits). */
+    fun artOverrideDir(): File = File(DesktopLibrary.defaultDbFile().parentFile, "art-overrides")
 
     override fun portraitExists(): Boolean = portraitFile().isFile
     override fun portraitBytes(): ByteArray? = portraitFile().takeIf { it.isFile }?.readBytes()

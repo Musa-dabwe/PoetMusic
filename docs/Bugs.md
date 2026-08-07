@@ -245,6 +245,64 @@ Full task list and rationale: `docs/dark-mode-fix.md`.
 
 ---
 
+## PR #13 — Tag-editor save fixes for non-MP3 formats
+
+### 13.1 🟣 Tag edits lost on rescan for FLAC/M4A/OGG
+- **Symptom:** editing title/artist/etc. on a non-MP3 track saved the change
+  to the database, but the next library scan reverted every tag column to the
+  file's on-disk values.
+- **Root cause:** `LibraryScanner.upsertTrack` (both Android and desktop) wrote
+  every tag column unconditionally on every file pass. The scanner ran
+  frequently (startup, folder change), so any on-disk value overwrote the
+  database edit.
+- **Fix:** a `file_mtime` column on `tracks` records the file's
+  `lastModified` at scan time. On each pass, the scanner compares the file's
+  current `lastModified` to the stored value; if unchanged the tag columns are
+  left alone and only housekeeping (`lrc_uri`, `folder_id`, `duration_ms`,
+  `file_mtime`) is updated. The DB migrates to v5 with the new column
+  (`MusicDatabase.kt`, `DesktopLibrary.kt`).
+- **Do not reintroduce by:** writing all tag columns unconditionally in
+  `upsertTrack`, or removing the `file_mtime` guard.
+- **How to verify:** edit title on a FLAC, force-rescan — title must persist.
+
+### 13.2 🟣 Cover-art override did not work for non-MP3 formats
+- **Symptom:** picking / removing / restoring cover art on FLAC/M4A/OGG
+  refreshed the editor preview but did not survive a reload.
+- **Root cause:** `TagEditor.saveTags` only wrote the art-override file for
+  MP3s (`isMp3 && artChanged`). For non-MP3 formats the override was never
+  created, so the next art lookup fell back to the (unchanged) embedded art.
+  The `artChanged` flag itself was also gated on `isMp3`, so non-MP3 art
+  changes did not even trigger an art cache eviction.
+- **Fix:** `artChanged` now fires for all formats. `TagEditor` writes a
+  per-track art-override file (`context.filesDir/art-overrides/{id}`) on
+  custom/remove for non-writable formats; `DesktopTags` mirrors this under
+  `DesktopLibrary.defaultDbFile().parentFile/art-overrides/`.
+  `AndroidHost.embeddedArt` and `DesktopHost.embeddedArt` check the override
+  file before falling back to the file's embedded art.
+- **Do not reintroduce by:** gating art-override writes or `artChanged` on
+  `isMp3`.
+- **How to verify:** set custom art on a FLAC, reload — custom art persists;
+  remove art — initials tile shows.
+
+### 13.3 🟣 Now Playing / tray / lockscreen did not reflect tag edits
+- **Symptom:** after saving a tag edit, the Now Playing card, tray and
+  lockscreen/MPRIS widget kept showing the old title/artist/cover until the
+  track was reselected from the library.
+- **Root cause:** `PlayerPort` had no hook for tag changes. The batch save
+  route called `host.onLibraryChanged()` only when `artChanged` was true, so
+  metadata-only edits never reached lockscreen/MPRIS.
+- **Fix:** `PlayerPort.onTrackMetadataChanged(trackId)` is called after every
+  single-track and batch save. `PlayerController` refreshes the MediaItem
+  metadata in its queue and calls `refreshPlayerSnapshot()`; `GstPlayer`
+  refreshes its queue entry. `host.onLibraryChanged()` is now called
+  unconditionally (not gated on `artChanged`).
+- **Do not reintroduce by:** gating `onTrackMetadataChanged` or
+  `onLibraryChanged` on `artChanged`.
+- **How to verify:** edit title while playing — Now Playing and tray update
+  within one poll cycle.
+
+---
+
 ## Design-file delta: `Poet_Music.initial.html` → `Poet_Music.dc_new.html`
 
 What changed between the two design prototypes (and is now implemented in the

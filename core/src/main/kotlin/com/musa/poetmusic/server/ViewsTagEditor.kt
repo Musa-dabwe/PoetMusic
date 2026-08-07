@@ -182,7 +182,7 @@ object TagEditorViews {
                 </div>
                 <div style="font-size:12px; color:var(--muted); text-align:center; max-width:280px; line-height:1.5;">
                   ${if (writesToFile) "Select a local PNG or JPEG. Removing artwork trims the embedded image to save file size."
-                    else "Cover-art editing needs a writable tag format. This file keeps its existing artwork."}
+                    else "Artwork is saved inside Poet\u2019s library. Other apps won\u2019t see the change."}
                 </div>
               </div>
             </div>

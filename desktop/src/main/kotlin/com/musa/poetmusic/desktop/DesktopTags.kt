@@ -71,7 +71,10 @@ class DesktopTags(
 
         val customArt = if (form.artAction == "custom") pendingArt else null
         val removeArt = form.artAction == "remove"
-        val artChanged = writable && (customArt != null || (removeArt && track.hasArt))
+        // Fire for all formats so the route evicts the cache and refreshes the UI,
+        // even when the art is saved to a library-side override file rather than
+        // embedded in the track.
+        val artChanged = customArt != null || (removeArt && track.hasArt)
 
         var fileMessage =
             if (writable) "Tags written to file"
@@ -103,6 +106,23 @@ class DesktopTags(
             if (written.isFailure) {
                 fileMessage = "Saved to library — writing the file failed " +
                     "(${written.exceptionOrNull()?.message ?: "unknown error"})"
+            }
+        }
+
+        // Non-writable: save artwork to a library-side override file so it
+        // persists across rescans and survives the fact that the container
+        // can't be written.
+        if (!writable && artChanged) {
+            val dir = artOverrideDir()
+            dir.mkdirs()
+            if (customArt != null) {
+                File(dir, "${track.id}").writeBytes(customArt)
+                File(dir, "${track.id}.mime").writeText(pendingArtMime)
+                fileMessage += " \u00b7 artwork saved in Poet"
+            } else if (removeArt) {
+                File(dir, "${track.id}").delete()
+                File(dir, "${track.id}.mime").delete()
+                fileMessage += " \u00b7 artwork removed"
             }
         }
 
@@ -194,6 +214,9 @@ class DesktopTags(
         block(tag)
         AudioFileIO.write(audio)
     }
+
+    /** Directory for art override files (non-writable format edits). */
+    private fun artOverrideDir(): File = File(DesktopLibrary.defaultDbFile().parentFile, "art-overrides")
 
     private fun artworkOf(bytes: ByteArray) = ArtworkFactory.getNew().apply {
         binaryData = bytes

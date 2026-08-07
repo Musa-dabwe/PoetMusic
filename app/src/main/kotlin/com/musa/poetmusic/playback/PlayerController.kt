@@ -313,6 +313,23 @@ object PlayerController : PlayerPort {
         }
     }
 
+    override fun onTrackMetadataChanged(trackId: Long) = onMain { p ->
+        val track = store?.track(trackId) ?: return@onMain
+        val id = trackId.toString()
+        for (i in 0 until p.mediaItemCount) {
+            val item = p.getMediaItemAt(i)
+            if (item.mediaId != id) continue
+            val updated = item.buildUpon().setMediaMetadata(
+                item.mediaMetadata.buildUpon()
+                    .setTitle(track.title)
+                    .setArtist(track.artist)
+                    .build()
+            ).build()
+            p.replaceMediaItem(i, updated)
+        }
+        refreshPlayerSnapshot()
+    }
+
     /**
      * Purge every queue entry for tracks that were deleted from the device.
      * Iterates backwards so indices stay valid while removing; removing the

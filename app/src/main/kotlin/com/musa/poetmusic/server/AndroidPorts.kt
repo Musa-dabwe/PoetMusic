@@ -25,6 +25,7 @@ import com.musa.poetmusic.playback.EqBand
 import com.musa.poetmusic.playback.EqPort
 import com.musa.poetmusic.playback.EqState
 import com.musa.poetmusic.widget.WidgetRenderer
+import java.io.File
 import java.io.InputStream
 
 /**
@@ -165,6 +166,11 @@ class AndroidHost(context: Context, private val db: MusicDatabase) : HostPort {
         runCatching { app.assets.open("web/$name").use { it.readBytes() } }.getOrNull()
 
     override fun embeddedArt(track: Track): ByteArray? {
+        // Library-side art override: covers non-MP3 formats whose containers
+        // can't be written, and art the user removed from a writable file.
+        val overrideFile = File(TagEditor.artOverrideDir(app), "${track.id}")
+        if (overrideFile.exists()) return overrideFile.readBytes().takeIf { it.isNotEmpty() }
+
         val mmr = MediaMetadataRetriever()
         return try {
             mmr.setDataSource(app, Uri.parse(track.uri))
