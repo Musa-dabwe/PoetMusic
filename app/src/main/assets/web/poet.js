@@ -390,27 +390,31 @@ document.addEventListener('contextmenu', function (e) {
 });
 
 /* ---- bottom drawers: swipe down to close ----
-   When a drawer/sheet in #sheet-root is scrolled to the top, dragging it
-   downward moves it with the finger; past the threshold it closes, otherwise
-   it springs back. Upward drags fall through to normal drawer scrolling. */
-(function () {
-  var panel = null, startY = 0, dy = 0, dragging = false;
+   When a drawer/sheet is scrolled to the top, dragging it downward moves it
+   with the finger; past the threshold it closes, otherwise it springs back.
+   Upward drags fall through to normal drawer scrolling.
+   selector  — CSS selector for the panel(s)
+   closeFn   — function to call when the drag exceeds the threshold
+   scrollSel — optional CSS selector for the scroll container inside the panel
+               (defaults to the panel itself) */
+function poetSwipeClose(selector, closeFn, scrollSel) {
+  var panel = null, scrollEl = null, startedInScroll = false,
+      startY = 0, dy = 0, dragging = false;
   document.addEventListener('touchstart', function (e) {
-    /* Only bottom sheets can be swiped down. From the landscape breakpoint up
-       the same elements are side sheets or centred dialogs, and the drag would
-       write translate(-50%,Ypx) over their own centring transform — flinging
-       them sideways instead of dismissing them. */
     if (!poetBottomSheet()) { panel = null; return; }
-    panel = e.target.closest('#sheet-root .drawer, #sheet-root .sheet');
+    panel = e.target.closest(selector);
     if (!panel || e.target.closest('input, textarea')) { panel = null; return; }
+    scrollEl = scrollSel ? panel.querySelector(scrollSel) : panel;
+    if (!scrollEl) scrollEl = panel;
+    startedInScroll = scrollSel !== undefined && scrollEl.contains(e.target);
     startY = e.touches[0].clientY; dy = 0; dragging = false;
   }, { passive: true });
   document.addEventListener('touchmove', function (e) {
     if (!panel) return;
     dy = e.touches[0].clientY - startY;
     if (!dragging) {
-      if (dy > 8 && panel.scrollTop <= 0) { dragging = true; panel.style.transition = 'none'; }
-      else if (dy < -8) { panel = null; return; } /* scrolling up: leave it alone */
+      if (dy > 8 && (!startedInScroll || scrollEl.scrollTop <= 0)) { dragging = true; panel.style.transition = 'none'; }
+      else if (dy < -8) { panel = null; return; }
     }
     if (dragging) {
       panel.style.transform = 'translate(-50%,' + Math.max(0, dy) + 'px)';
@@ -420,13 +424,15 @@ document.addEventListener('contextmenu', function (e) {
   function endDrag() {
     if (!panel) return;
     var p = panel; panel = null;
-    if (dragging && dy > 90) { closeSheet(); }
+    if (dragging && dy > 90) { closeFn(); }
     else { p.style.transition = ''; p.style.transform = ''; }
     dragging = false;
   }
   document.addEventListener('touchend', endDrag);
   document.addEventListener('touchcancel', endDrag);
-})();
+}
+poetSwipeClose('#sheet-root .drawer, #sheet-root .sheet', closeSheet);
+poetSwipeClose('#queue-root .queue-panel', closeQueue, '#qp-body');
 
 /* ---- queue panel: drag the grab handle to reorder upcoming songs ----
    The handle has touch-action:none, so the browser never scrolls the panel

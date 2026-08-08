@@ -19,6 +19,7 @@ object QueueViews {
     fun queuePanel(db: LibraryStore, items: List<QueueItem>, playing: Boolean, sourceName: String): String = """
         <div class="queue-shield" onclick="closeQueue()"></div>
         <div class="queue-panel">
+          <div class="sheet-grab"></div>
           <div class="qp-hdr">
             <button class="qp-back" onclick="closeQueue()" aria-label="Close queue">
               <svg width="14" height="8" viewBox="0 0 14 8"><path d="M1 1 L7 7 L13 1" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>

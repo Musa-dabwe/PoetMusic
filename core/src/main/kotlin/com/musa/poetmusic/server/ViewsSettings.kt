@@ -142,7 +142,7 @@ object SettingsViews {
                     hx-post="/api/eq/preset?name=${enc(name)}" hx-target="#eq-card" hx-swap="innerHTML">$name</button>"""
         }
 
-        val bands = if (!s.available) "" else {
+        val bands = if (!s.enabled || !s.available) "" else {
             val sliders = s.bands.joinToString("") { b ->
                 val dB = b.levelMillibels / 100.0
                 """
@@ -157,13 +157,13 @@ object SettingsViews {
                   <div class="eq-band-hz">${EqPresets.label(b.centerHz)}</div>
                 </div>"""
             }
-            """<div class="eq-bands${if (s.enabled) "" else " eq-off"}">$sliders</div>"""
+            """<div class="eq-bands">$sliders</div>"""
         }
 
-        val bass = if (!s.bassAvailable) "" else
-            strengthRow("Bass boost", "bass", s.bassStrength, s.enabled)
-        val virt = if (!s.virtualizerAvailable) "" else
-            strengthRow("Virtualizer", "virtualizer", s.virtualizerStrength, s.enabled)
+        val bass = if (!s.enabled || !s.bassAvailable) "" else
+            strengthRow("Bass boost", "bass", s.bassStrength)
+        val virt = if (!s.enabled || !s.virtualizerAvailable) "" else
+            strengthRow("Virtualizer", "virtualizer", s.virtualizerStrength)
 
         return """
         $toggle
@@ -179,10 +179,10 @@ object SettingsViews {
      * of the track is an inline gradient, the same trick the Now Playing seek
      * bar uses, so the control reads as filled without any client-side paint.
      */
-    private fun strengthRow(label: String, kind: String, value: Int, enabled: Boolean): String {
+    private fun strengthRow(label: String, kind: String, value: Int): String {
         val pct = value * 100 / EqPort.STRENGTH_MAX
         return """
-        <div class="eq-strength${if (enabled) "" else " eq-off"}">
+        <div class="eq-strength">
           <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:700; margin-bottom:6px;">
             <span>$label</span><span style="color:var(--muted);" id="eq-$kind-val">$pct%</span>
           </div>

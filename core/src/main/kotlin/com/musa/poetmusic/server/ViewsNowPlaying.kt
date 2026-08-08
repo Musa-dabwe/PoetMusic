@@ -62,8 +62,6 @@ object NowPlayingViews {
         if (s.trackId < 0) {
             return """
             <div class="screen" id="np-root" data-track-id="-1" style="text-align:center;">
-              <button class="backlink" hx-get="/screens/library" hx-target="#main-container" style="float:left;">← Library</button>
-              <div style="clear:both;"></div>
               <div class="empty">
                 <div style="font-size:40px; margin-bottom:12px;">♪</div>
                 Nothing playing yet.<br>Pick a song from your library.
@@ -78,7 +76,6 @@ object NowPlayingViews {
         val artBg = artColor(s.trackId)
         return """
         <div class="screen np-screen" id="np-root" data-track-id="${s.trackId}">
-          <button class="backlink" hx-get="/screens/library" hx-target="#main-container">← Library</button>
           <div class="np-grid">
             <div class="np-art" style="background:repeating-linear-gradient(45deg, $artBg, $artBg 14px, var(--card-bg) 14px, var(--card-bg) 28px);"
                  hx-get="/partial/art-view/${s.trackId}" hx-target="#modal-root" hx-swap="innerHTML"
