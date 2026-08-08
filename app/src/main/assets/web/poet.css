@@ -781,7 +781,6 @@ body.journal-open #main-container { padding:0; }
   #toast { bottom:calc(var(--tray-h) + 14px); }
 
   /* Now Playing: art left, controls right, lyrics as a third column */
-  .np-screen .backlink { display:none; }
   .np-grid { flex-direction:row; align-items:center; gap:22px; }
   /* flex:0 0 auto, not 0 1 auto: letting the row shrink the art overrides
      aspect-ratio on the width while height stays 100%, which stretches the
