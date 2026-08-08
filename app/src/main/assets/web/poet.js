@@ -398,20 +398,22 @@ document.addEventListener('contextmenu', function (e) {
    scrollSel — optional CSS selector for the scroll container inside the panel
                (defaults to the panel itself) */
 function poetSwipeClose(selector, closeFn, scrollSel) {
-  var panel = null, scrollEl = null, startY = 0, dy = 0, dragging = false;
+  var panel = null, scrollEl = null, startedInScroll = false,
+      startY = 0, dy = 0, dragging = false;
   document.addEventListener('touchstart', function (e) {
     if (!poetBottomSheet()) { panel = null; return; }
     panel = e.target.closest(selector);
     if (!panel || e.target.closest('input, textarea')) { panel = null; return; }
     scrollEl = scrollSel ? panel.querySelector(scrollSel) : panel;
     if (!scrollEl) scrollEl = panel;
+    startedInScroll = scrollSel !== undefined && scrollEl.contains(e.target);
     startY = e.touches[0].clientY; dy = 0; dragging = false;
   }, { passive: true });
   document.addEventListener('touchmove', function (e) {
     if (!panel) return;
     dy = e.touches[0].clientY - startY;
     if (!dragging) {
-      if (dy > 8 && scrollEl.scrollTop <= 0) { dragging = true; panel.style.transition = 'none'; }
+      if (dy > 8 && (!startedInScroll || scrollEl.scrollTop <= 0)) { dragging = true; panel.style.transition = 'none'; }
       else if (dy < -8) { panel = null; return; }
     }
     if (dragging) {

@@ -48,14 +48,14 @@ toggle) is already accepted by the current design.
 ### Step-by-step tasks
 
 1. In `ViewsSettings.kt` `equalizerCard()` (line 121), after reading
-   `val s = eq.state()`, wrap the **preset row** (lines 140-143, 170-171),
-   **bands** (lines 145-161, 172), **bass** (lines 163-164, 173), and
-   **virtualizer** (lines 165-166, 174) in an `if (s.enabled) { ... }` block.
-   When disabled, emit only the toggle — no presets, no sliders.
+   `val s = eq.state()`, wrap the **bands** (lines 145-161, 172),
+   **bass** (lines 163-164, 173), and **virtualizer** (lines 165-166, 174)
+   in an `if (s.enabled) { ... }` block. Keep the preset row visible and
+   functional when disabled. When disabled, emit the toggle and presets,
+   but omit the sliders.
 
-2. Keep the `eq-off` CSS class on the bands container as a fallback for the
-   brief moment before htmx swaps, but it will no longer be needed after the
-   swap. No CSS changes required.
+2. The `eq-off` CSS class is no longer emitted — the disabled controls
+   are omitted entirely after re-render. No CSS changes required.
 
 3. Verify: toggle OFF → sliders disappear; toggle ON → sliders reappear with
    their persisted values. Drag a slider while enabled → value persists across
@@ -64,16 +64,11 @@ toggle) is already accepted by the current design.
 4. No route changes needed — the existing `/api/eq/enabled` handler already
    re-renders the card with fresh state.
 
-### Open questions
+### Open questions (resolved)
 
-- **Presets:** Should the preset row also be hidden when EQ is disabled? The
-  task description says "ideally" — recommend hiding it since presets are inert
-  when disabled. If the user wants to keep presets visible for preview, leave
-  them but make them non-interactive (remove hx-post attributes).
-- **Strength sliders (bass/virtualizer):** These are independent effects, not
-  part of the 10-band EQ. On desktop (GStreamer), bass/virtualizer are always
-  unavailable anyway. On Android they are tied to the same enable/disable.
-  Recommend hiding them when EQ is disabled for consistency.
+- **Presets:** Kept visible and functional when disabled — user confirmed.
+- **Strength sliders (bass/virtualizer):** Hidden when disabled, same as
+  frequency bands — user confirmed.
 
 ### Complexity: **Low**
 
@@ -227,7 +222,7 @@ rather than reinvented.
 
 3. **Add a second invocation** for the queue panel:
    ```javascript
-   poetSwipeClose('#queue-root .queue-panel', closeQueue);
+   poetSwipeClose('#queue-root .queue-panel', closeQueue, '#qp-body');
    ```
    This reuses the exact same gesture logic — same threshold (90px), same
    deadzone (8px), same `scrollTop <= 0` guard, same `poetBottomSheet()`
@@ -235,16 +230,12 @@ rather than reinvented.
 
 4. **Handle the queue panel's scroll context.** The `#qp-body` element has
    `overflow-y:auto`, so `panel.scrollTop` must be checked on the scrollable
-   child, not the panel itself. Adjust the scrollTop check:
-   ```javascript
-   var scrollEl = panel.querySelector('#qp-body') || panel;
-   if (dy > 8 && scrollEl.scrollTop <= 0) { ... }
-   ```
-   The existing IIFE already handles this correctly for `.sheet` and `.drawer`
-   (which have their own scroll containers), so the extracted function should
-   accept an optional scroll container selector or auto-detect via
-   `panel.querySelector('[overflow-y]')` — but the simplest approach is to
-   always check the panel itself first, then its first overflow child.
+   child, not the panel itself. The third parameter (`scrollSel`) resolves
+   this: `poetSwipeClose` queries `panel.querySelector(scrollSel)` to find
+   the scroll container. A `startedInScroll` flag tracks whether the touch
+   began inside the scroll container — header/handle touches can always
+   initiate dismissal regardless of scroll position, while content touches
+   require `scrollTop <= 0`.
 
 5. **Verify on both platforms:**
    - Android WebView: swipe down on queue panel → drags with finger → past
