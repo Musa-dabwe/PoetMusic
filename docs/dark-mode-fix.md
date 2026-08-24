@@ -144,12 +144,12 @@ before they are reported.
   | Queue back chevron (`ViewsQueue.kt`) | `.qp-back` → `var(--overlay-neutral)` | ≈1.1:1, effectively invisible |
   | All 12 drawer action icons (`ViewsDrawer.kt`) | `.dicon` → `var(--accent-soft)` in dark | ≈1.9:1, under the 3:1 floor for non-text |
 
-      Confirmed correct and left alone: `ICON_QP_PLAY`/`ICON_QP_PAUSE` (on
-      `.qp-playbtn` = `var(--accent)`), `CHECK_SVG` in `.row-check`/`.pl-check`
-      (only rendered once the box is `var(--accent)`), the "Play all" triangle
-      (inside `.btn-primary`), the journal portrait pencil (on `var(--accent)`),
-      the `.cab-*` icons and tip banner (on `var(--panel-strong)`), and
-      `ICON_D_DELETE`/`ICON_D_TIMER_OFF` (fixed rose `#c25f6e`, legible on both).
+  Confirmed correct and left alone: `ICON_QP_PLAY`/`ICON_QP_PAUSE` (on
+  `.qp-playbtn` = `var(--accent)`), `CHECK_SVG` in `.row-check`/`.pl-check`
+  (only rendered once the box is `var(--accent)`), the "Play all" triangle
+  (inside `.btn-primary`), the journal portrait pencil (on `var(--accent)`),
+  the `.cab-*` icons and tip banner (on `var(--panel-strong)`), and
+  `ICON_D_DELETE`/`ICON_D_TIMER_OFF` (fixed rose `#c25f6e`, legible on both).
 
 - [x] Logged as **12.1** and **12.2** in `docs/Bugs.md`, with "do not reintroduce
       by" notes and two new entries on the pre-merge regression checklist.

@@ -226,8 +226,9 @@ class MainActivity : AppCompatActivity() {
                 else -> "application/octet-stream"
             }
             return try {
-                WebResourceResponse(mime, null, assets.open("web/$name"))
-            } catch (e: Exception) {
+                val charset = if (mime.startsWith("text/") || mime == "application/javascript") "utf-8" else null
+                WebResourceResponse(mime, charset, assets.open("web/$name"))
+            } catch (_: Exception) {
                 null // Fall through to the Ktor /assets route.
             }
         }

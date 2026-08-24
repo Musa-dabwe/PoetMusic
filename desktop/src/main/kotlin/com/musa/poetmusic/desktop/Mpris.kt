@@ -364,13 +364,15 @@ private class ArtFiles {
             bytes[1] == 'P'.code.toByte() && bytes[2] == 'N'.code.toByte() && bytes[3] == 'G'.code.toByte()
 
     private fun remember(file: File) {
-        recent.addLast(file)
-        while (recent.size > KEEP) recent.removeFirst().delete()
+        synchronized(recent) {
+            recent.addLast(file)
+            while (recent.size > KEEP) recent.removeFirst().delete()
+        }
     }
 
     fun clear() {
         runCatching { dir.listFiles()?.forEach { it.delete() } }
-        recent.clear()
+        synchronized(recent) { recent.clear() }
     }
 
     private companion object {

@@ -14,7 +14,11 @@ Poet Music is an offline-first app on both platforms. Key points of its posture:
   `127.0.0.1:8080` on Android, and `127.0.0.1` on a port the OS picks at random on
   Linux, because a desktop is multi-user and a fixed port collides. It is not reachable
   from other devices. On Android the `INTERNET` permission is required only for this
-  loopback communication between the WebView and the server.
+  loopback communication between the WebView and the server. Note: other local processes
+  running under the same user account can reach the loopback server, but the app collects
+  no sensitive data (no accounts, no analytics, no personal identifiers beyond file names
+  and tags), making this an acceptable trade-off for the simplicity of loopback-only
+  binding.
 - **No network calls** — the app makes no outbound network requests, collects no
   analytics, and transmits no user data. The WebView / WebKit view loads nothing from
   outside the app: fonts, scripts and stylesheets are all served from the bundled

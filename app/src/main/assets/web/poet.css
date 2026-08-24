@@ -109,7 +109,7 @@ button { font-family: inherit; color: var(--ink); }
    decides which pixels survive, so one asset serves both themes and the active
    accent without a second file. Every icon-*.svg is framed to the same square
    so their optical weight matches at 20px. */
-.rail-item .ri-ico { flex:0 0 20px; height:20px; opacity:0.8; background:currentColor;
+.rail-item .ri-ico { flex:0 0 20px; height:20px; opacity:0.8; background:currentcolor;
   -webkit-mask-position:center; mask-position:center; -webkit-mask-size:contain; mask-size:contain;
   -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
 .ri-songs { -webkit-mask-image:url(/assets/icon-songs.svg); mask-image:url(/assets/icon-songs.svg); }

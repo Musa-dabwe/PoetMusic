@@ -5,8 +5,9 @@ It plays the music already on your disk: no account, no catalogue, no sign-in.
 
 Both builds are one application. The UI is an [htmx](https://htmx.org) single-page app
 served by an embedded [Ktor](https://ktor.io) server running inside the app process and
-bound to loopback; the view layer, the routing table and the frontend assets live in
-`:core` and are shared byte-for-byte. Only the platform seams differ — playback,
+bound to loopback; the view layer and the routing table live in
+`:core` and are shared byte-for-byte, while the frontend assets live in
+`app/src/main/assets/web/`. Only the platform seams differ — playback,
 storage, scanning, tag writing and the window.
 
 | | Android | Linux |
@@ -63,7 +64,7 @@ storage, scanning, tag writing and the window.
 
 ## Architecture
 
-```
+```text
                     ┌───────────────── :core ─────────────────┐
                     │  Views* / Shell   server-rendered HTML   │
                     │  PoetRoutes       the whole routing table│
@@ -120,7 +121,7 @@ Licensed under the [Apache License 2.0](LICENSE).
 
 ## Credits
 
-- Placeholder cover art: [Designed by rawpixel.com / Freepik](http://www.freepik.com).
+- Placeholder cover art: [Designed by rawpixel.com / Freepik](https://www.freepik.com).
   The original image was modified (cropped/resized) for in-app use, as permitted
   by the Freepik free license.
 

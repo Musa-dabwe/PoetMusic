@@ -407,8 +407,13 @@ object PlayerController : PlayerPort {
                 latch.countDown()
             }
         }
-        if (!latch.await(1, TimeUnit.SECONDS)) {
-            Log.w("PlayerController", "onMainBlocking timed out; returning fallback state")
+        try {
+            if (!latch.await(1, TimeUnit.SECONDS)) {
+                Log.w("PlayerController", "onMainBlocking timed out; returning fallback state")
+                return fallback
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
             return fallback
         }
         return result

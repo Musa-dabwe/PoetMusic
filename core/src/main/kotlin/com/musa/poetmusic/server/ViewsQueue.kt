@@ -6,8 +6,8 @@ import com.musa.poetmusic.playback.QueueItem
 /** Slide-up queue panel (Musicolet-style). */
 object QueueViews {
 
-    private val ICON_QP_PLAY = """<svg width="12" height="14" viewBox="0 0 22 26" style="margin-left:2px;"><polygon points="0,0 22,13 0,26" fill="#3b3651"></polygon></svg>"""
-    private val ICON_QP_PAUSE = """<div style="display:flex; gap:4px;"><div style="width:4px; height:14px; background:#3b3651; border-radius:2px;"></div><div style="width:4px; height:14px; background:#3b3651; border-radius:2px;"></div></div>"""
+    private val ICON_QP_PLAY = """<svg width="12" height="14" viewBox="0 0 22 26" style="margin-left:2px;"><polygon points="0,0 22,13 0,26" fill="currentColor"></polygon></svg>"""
+    private val ICON_QP_PAUSE = """<div style="display:flex; gap:4px;"><div style="width:4px; height:14px; background:currentColor; border-radius:2px;"></div><div style="width:4px; height:14px; background:currentColor; border-radius:2px;"></div></div>"""
 
     /**
      * Slide-up queue panel (Musicolet-style): pinned Now Playing card with EQ

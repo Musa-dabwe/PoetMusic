@@ -137,9 +137,9 @@ class GstPlayer(private val store: LibraryStore) : PlayerPort {
 
     /** Playbin's own volume, 0.0 to 1.0 — the range MPRIS uses. */
     var volume: Double
-        get() = runCatching { (bin.get("volume") as Double).coerceIn(0.0, 1.0) }.getOrDefault(1.0)
+        get() = onOps(1.0) { (bin.get("volume") as Double).coerceIn(0.0, 1.0) }
         set(value) {
-            runCatching { bin.set("volume", value.coerceIn(0.0, 1.0)) }
+            ops.execute { runCatching { bin.set("volume", value.coerceIn(0.0, 1.0)) } }
         }
 
     fun setRepeatMode(code: Int) = ops.execute {
